@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  volunteer-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
