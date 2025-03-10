@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Mail, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Mail, AlertCircle, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import SocialLoginButton from '../components/SocialLoginButton';
@@ -12,7 +12,7 @@ const LoginPage: React.FC = () => {
     loginWithFacebook, 
     isAuthenticated, 
     isLoading, 
-    users,
+    needsOwner,
     sendPasswordResetEmail
   } = useAuth();
   const { isGoogleAuthEnabled, isFacebookAuthEnabled } = useSettings();
@@ -27,7 +27,7 @@ const LoginPage: React.FC = () => {
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetError, setResetError] = useState('');
   
-  const isFirstUser = users.length === 0;
+
   
   // Redirect if already authenticated
   useEffect(() => {
@@ -36,7 +36,7 @@ const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, isLoading, navigate]);
   
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError('');
     
@@ -52,9 +52,17 @@ const LoginPage: React.FC = () => {
     
     setIsProcessing(true);
     try {
-      await loginWithEmail(email, password);
-    } catch (err) {
-      setError('Login failed. Please check your credentials and try again.');
+      const result = await loginWithEmail(email, password);
+      if (result.error) {
+        throw result.error;
+      }
+      if (!result.user) {
+        throw new Error('Login failed - no user returned');
+      }
+      // Successfully logged in, navigation will happen automatically
+    } catch (error: unknown) {
+      console.error('Error during email login:', error);
+      setError(error instanceof Error ? error.message : 'Login failed. Please check your credentials and try again.');
       setIsProcessing(false);
     }
   };
@@ -189,7 +197,7 @@ const LoginPage: React.FC = () => {
             <p className="text-gray-600">
               Sign in to manage events and volunteer opportunities
             </p>
-            {isFirstUser && (
+            {needsOwner && (
               <div className="mt-2 p-2 bg-secondary-100 text-secondary-800 rounded-md">
                 You'll be registered as the system owner with full access
               </div>
@@ -251,7 +259,7 @@ const LoginPage: React.FC = () => {
               }`}
             >
               <Mail className="h-5 w-5 mr-2" />
-              {isFirstUser ? 'Sign Up with Email' : 'Sign In with Email'}
+              {needsOwner ? 'Sign Up with Email' : 'Sign In with Email'}
             </button>
           </form>
           

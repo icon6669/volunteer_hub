@@ -1,7 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../lib/supabase';
 import { User, UserRole } from '../types';
 import * as api from '../api';
+
+
+
+interface LoginResponse {
+  user: User | null;
+  error: Error | null | unknown;
+}
+
+// API response types are defined in the API module
 
 interface AuthContextType {
   user: User | null;
@@ -10,7 +19,8 @@ interface AuthContextType {
   isLoading: boolean;
   isOwner: boolean;
   isManager: boolean;
-  loginWithEmail: (email: string, password: string) => Promise<void>;
+  needsOwner: boolean;
+  loginWithEmail: (email: string, password: string) => Promise<LoginResponse>;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
   logout: () => Promise<void>;
@@ -23,7 +33,7 @@ interface AuthContextType {
   resetUnreadMessages: (userId: string) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -41,33 +51,66 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [needsOwner, setNeedsOwner] = useState(false);
 
   const isOwner = user?.userRole === UserRole.OWNER;
   const isManager = user?.userRole === UserRole.MANAGER || isOwner;
 
-  // Load users from server
   useEffect(() => {
     const loadUsers = async () => {
       try {
         setIsLoading(true);
-        const fetchedUsers = await api.fetchUsers();
-        setUsers(fetchedUsers);
         
-        // Check if there's a current user in sessionStorage (for session persistence)
+        // Temporary check to debug database policies
+        try {
+          console.log('Checking database policies...');
+          // Use dynamic access to avoid TypeScript errors
+          const checkFunc = (api as any).checkDatabasePolicies;
+          if (typeof checkFunc === 'function') {
+            const policyCheck = await checkFunc();
+            console.log('Policy check results:', policyCheck);
+          }
+        } catch (err) {
+          console.error('Policy check error:', err);
+        }
+        
+        // Call the API and handle the response
+        const response = await api.fetchUsers();
+        
+        // Safely handle the response structure
+        let fetchedUsers: User[] = [];
+        let ownerNeeded = false;
+        
+        if (response && typeof response === 'object' && 'users' in response && 'needsOwner' in response) {
+          // Explicitly check and assert the types
+          if (Array.isArray(response.users)) {
+            fetchedUsers = response.users as User[];
+          }
+          if (typeof response.needsOwner === 'boolean') {
+            ownerNeeded = response.needsOwner;
+          }
+        } else {
+          console.error('Unexpected response format from fetchUsers:', response);
+        }
+        
+        // Now we can use the destructured values directly
+        setUsers(fetchedUsers);
+        setNeedsOwner(ownerNeeded);
+        
         const storedUser = sessionStorage.getItem('currentUser');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
-          // Find the user in the fetched users to ensure we have the latest data
-          const currentUser = fetchedUsers.find(u => u.id === parsedUser.id);
+          const currentUser = fetchedUsers.find((u: User) => u.id === parsedUser.id);
           if (currentUser) {
             setUser(currentUser);
           } else {
-            // If user no longer exists on server, remove from sessionStorage
             sessionStorage.removeItem('currentUser');
           }
         }
       } catch (error) {
         console.error('Error loading users:', error instanceof Error ? error.message : 'Unknown error');
+        setUsers([]);
+        setNeedsOwner(false);
       } finally {
         setIsLoading(false);
       }
@@ -76,86 +119,65 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loadUsers();
   }, []);
 
-  const loginWithEmail = async (email: string, password: string) => {
-    setIsLoading(true);
+  const loginWithEmail = async (email: string, password: string): Promise<LoginResponse> => {
     try {
-      // Check if user exists in our system
-      const existingUser = users.find(u => u.email === email);
-      
-      if (existingUser) {
-        // Update user in state and sessionStorage for session persistence
-        setUser(existingUser);
-        sessionStorage.setItem('currentUser', JSON.stringify(existingUser));
-      } else {
-        // Create new user if they don't exist
-        const newUser: User = {
-          id: uuidv4(),
-          name: email.split('@')[0],
-          email,
-          image: `https://ui-avatars.com/api/?name=${encodeURIComponent(email.split('@')[0])}&background=random`,
-          userRole: users.length === 0 ? UserRole.OWNER : UserRole.VOLUNTEER,
-          emailNotifications: true,
-          unreadMessages: 0,
-          providerId: 'password'
-        };
-        
-        // Save new user to server
-        const savedUser = await api.saveUser(newUser);
-        
-        if (savedUser) {
-          // Update local state
-          const updatedUsers = [...users, newUser];
-          setUsers(updatedUsers);
-          setUser(newUser);
-          
-          // Store current user in sessionStorage for session persistence
-          sessionStorage.setItem('currentUser', JSON.stringify(newUser));
-        }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) throw error;
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', data.user?.id)
+        .single();
+
+      if (userData) {
+        setUser(userData);
+        return { user: userData, error: null };
       }
+
+      return { user: null, error: new Error('User not found') };
     } catch (error) {
-      console.error("Error during email login:", error instanceof Error ? error.message : 'Unknown error');
-      throw error;
-    } finally {
-      setIsLoading(false);
+      console.error('Login error:', error);
+      return { user: null, error: error instanceof Error ? error : new Error('Login failed') };
     }
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (): Promise<void> => {
     setIsLoading(true);
     try {
-      // This is a mock implementation since we're not using real Firebase
       console.log("Mock Google login");
       
-      // Create a mock user
       const email = "google.user@example.com";
       const name = "Google User";
       
-      // Check if user exists in our system
-      const existingUser = users.find(u => u.email === email);
+      const existingUser = users.find((u: User) => u.email === email);
       
       if (existingUser) {
         setUser(existingUser);
         sessionStorage.setItem('currentUser', JSON.stringify(existingUser));
       } else {
-        // Create new user
         const newUser: User = {
-          id: uuidv4(),
+          id: supabase.auth.user()?.id,
           name,
           email,
           image: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-          userRole: users.length === 0 ? UserRole.OWNER : UserRole.VOLUNTEER,
+          userRole: needsOwner ? UserRole.OWNER : UserRole.VOLUNTEER,
           emailNotifications: true,
           unreadMessages: 0,
           providerId: 'google.com'
         };
         
-        // Save new user to server
-        const savedUser = await api.saveUser(newUser);
+        const response = await api.saveUser(newUser);
         
-        if (savedUser) {
+        if (response) {
           const updatedUsers = [...users, newUser];
           setUsers(updatedUsers);
           setUser(newUser);
+          setNeedsOwner(false); 
           sessionStorage.setItem('currentUser', JSON.stringify(newUser));
         }
       }
@@ -167,42 +189,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const loginWithFacebook = async () => {
+  const loginWithFacebook = async (): Promise<void> => {
     setIsLoading(true);
     try {
-      // This is a mock implementation since we're not using real Firebase
       console.log("Mock Facebook login");
       
-      // Create a mock user
       const email = "facebook.user@example.com";
       const name = "Facebook User";
       
-      // Check if user exists in our system
-      const existingUser = users.find(u => u.email === email);
+      const existingUser = users.find((u: User) => u.email === email);
       
       if (existingUser) {
         setUser(existingUser);
         sessionStorage.setItem('currentUser', JSON.stringify(existingUser));
       } else {
-        // Create new user
         const newUser: User = {
-          id: uuidv4(),
+          id: supabase.auth.user()?.id,
           name,
           email,
           image: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-          userRole: users.length === 0 ? UserRole.OWNER : UserRole.VOLUNTEER,
+          userRole: needsOwner ? UserRole.OWNER : UserRole.VOLUNTEER,
           emailNotifications: true,
           unreadMessages: 0,
           providerId: 'facebook.com'
         };
         
-        // Save new user to server
-        const savedUser = await api.saveUser(newUser);
+        const response = await api.saveUser(newUser);
         
-        if (savedUser) {
+        if (response) {
           const updatedUsers = [...users, newUser];
           setUsers(updatedUsers);
           setUser(newUser);
+          setNeedsOwner(false); 
           sessionStorage.setItem('currentUser', JSON.stringify(newUser));
         }
       }
@@ -214,7 +232,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     try {
       setUser(null);
       sessionStorage.removeItem('currentUser');
@@ -225,7 +243,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   
   const sendPasswordResetEmail = async (email: string): Promise<boolean> => {
     try {
-      // Mock implementation since we're not using real Firebase
       console.log(`Mock password reset email sent to ${email}`);
       return true;
     } catch (error) {
@@ -234,20 +251,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const updateUserRole = async (userId: string, role: UserRole) => {
+  const updateUserRole = async (userId: string, role: UserRole): Promise<void> => {
     try {
-      // Update user role on server
       const success = await api.updateUserRole(userId, role);
       
       if (success) {
-        // Update local state
         const updatedUsers = users.map(u => 
           u.id === userId ? { ...u, userRole: role } : u
         );
         
         setUsers(updatedUsers);
         
-        // If the updated user is the current user, update the current user state
         if (user && user.id === userId) {
           const updatedUser = { ...user, userRole: role };
           setUser(updatedUser);
@@ -259,35 +273,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const transferOwnership = async (newOwnerId: string) => {
-    // Only the current owner can transfer ownership
+  const transferOwnership = async (newOwnerId: string): Promise<void> => {
     if (!isOwner || !user) return;
     
     try {
-      // Find the new owner user
       const newOwnerUser = users.find(u => u.id === newOwnerId);
       if (!newOwnerUser) {
         console.error('User not found for ownership transfer');
         return;
       }
       
-      // Update the new owner's role
       await api.updateUserRole(newOwnerId, UserRole.OWNER);
       
-      // Update the current owner's role to manager
       await api.updateUserRole(user.id, UserRole.MANAGER);
       
-      // Update all users in local state
       const updatedUsers = users.map(u => {
         if (u.id === newOwnerId) return { ...u, userRole: UserRole.OWNER };
         if (u.id === user.id) return { ...u, userRole: UserRole.MANAGER };
         return u;
       });
       
-      // Update state
       setUsers(updatedUsers);
       
-      // Update current user
       const updatedCurrentUser = { ...user, userRole: UserRole.MANAGER };
       setUser(updatedCurrentUser);
       sessionStorage.setItem('currentUser', JSON.stringify(updatedCurrentUser));
@@ -296,30 +303,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
   
-  const deleteUser = async (userId: string) => {
+  const deleteUser = async (userId: string): Promise<void> => {
     try {
-      // Check if user is the owner
       const userToDelete = users.find(u => u.id === userId);
       if (!userToDelete) {
         console.error('User not found for deletion');
         return;
       }
       
-      // Cannot delete the owner
       if (userToDelete.userRole === UserRole.OWNER) {
         console.error('Cannot delete the owner account');
         return;
       }
       
-      // Delete user from server
       const success = await api.deleteUser(userId);
       
       if (success) {
-        // Remove user from users array in local state
         const updatedUsers = users.filter(u => u.id !== userId);
         setUsers(updatedUsers);
         
-        // If deleting the current user, log them out
         if (user && user.id === userId) {
           await logout();
         }
@@ -329,20 +331,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const updateEmailNotifications = async (userId: string, enabled: boolean) => {
+  const updateEmailNotifications = async (userId: string, enabled: boolean): Promise<void> => {
     try {
-      // Update email notifications on server
       const success = await api.updateEmailNotifications(userId, enabled);
       
       if (success) {
-        // Update local state
         const updatedUsers = users.map(u => 
           u.id === userId ? { ...u, emailNotifications: enabled } : u
         );
         
         setUsers(updatedUsers);
         
-        // If the updated user is the current user, update the current user state
         if (user && user.id === userId) {
           const updatedUser = { ...user, emailNotifications: enabled };
           setUser(updatedUser);
@@ -354,20 +353,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const incrementUnreadMessages = async (userId: string) => {
+  const incrementUnreadMessages = async (userId: string): Promise<void> => {
     try {
-      // Increment unread messages on server
       const success = await api.incrementUnreadMessages(userId);
       
       if (success) {
-        // Update local state
         const updatedUsers = users.map(u => 
           u.id === userId ? { ...u, unreadMessages: (u.unreadMessages || 0) + 1 } : u
         );
         
         setUsers(updatedUsers);
         
-        // If the updated user is the current user, update the current user state
         if (user && user.id === userId) {
           const updatedUser = { ...user, unreadMessages: (user.unreadMessages || 0) + 1 };
           setUser(updatedUser);
@@ -379,20 +375,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const resetUnreadMessages = async (userId: string) => {
+  const resetUnreadMessages = async (userId: string): Promise<void> => {
     try {
-      // Reset unread messages on server
       const success = await api.resetUnreadMessages(userId);
       
       if (success) {
-        // Update local state
         const updatedUsers = users.map(u => 
           u.id === userId ? { ...u, unreadMessages: 0 } : u
         );
         
         setUsers(updatedUsers);
         
-        // If the updated user is the current user, update the current user state
         if (user && user.id === userId) {
           const updatedUser = { ...user, unreadMessages: 0 };
           setUser(updatedUser);
@@ -404,26 +397,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const contextValue: AuthContextType = {
+    user,
+    users,
+    isAuthenticated: !!user,
+    isLoading,
+    isOwner,
+    isManager,
+    needsOwner,
+    loginWithEmail,
+    loginWithGoogle,
+    loginWithFacebook,
+    logout,
+    sendPasswordResetEmail,
+    updateUserRole,
+    transferOwnership,
+    deleteUser,
+    updateEmailNotifications,
+    incrementUnreadMessages,
+    resetUnreadMessages
+  };
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      users,
-      isAuthenticated: !!user,
-      isLoading,
-      isOwner,
-      isManager,
-      loginWithEmail,
-      loginWithGoogle,
-      loginWithFacebook,
-      logout,
-      sendPasswordResetEmail,
-      updateUserRole,
-      transferOwnership,
-      deleteUser,
-      updateEmailNotifications,
-      incrementUnreadMessages,
-      resetUnreadMessages
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

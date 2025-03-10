@@ -52,17 +52,40 @@ CREATE POLICY "Anyone can read system settings"
 CREATE POLICY "Only owner can update system settings"
   ON system_settings
   FOR UPDATE
-  USING (auth.uid() IN (
-    SELECT id FROM users WHERE user_role = 'owner'
-  ));
+  USING (
+    EXISTS (
+      SELECT 1 FROM auth.users
+      WHERE auth.users.id = auth.uid()
+      AND user_role = 'owner'
+    )
+  );
 
 -- Create policy for inserting system settings (only owner)
 CREATE POLICY "Only owner can insert system settings"
   ON system_settings
   FOR INSERT
-  WITH CHECK (auth.uid() IN (
-    SELECT id FROM users WHERE user_role = 'owner'
-  ));
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM auth.users
+      WHERE auth.users.id = auth.uid()
+      AND user_role = 'owner'
+    )
+  );
+
+-- Insert default system settings
+INSERT INTO system_settings (
+  organization_name,
+  primary_color,
+  allow_public_event_viewing,
+  google_auth_enabled,
+  facebook_auth_enabled
+) VALUES (
+  'Volunteer Hub',
+  '#0ea5e9',
+  false,
+  false,
+  false
+);
 
 -- Create trigger to update the updated_at column
 CREATE OR REPLACE FUNCTION update_modified_column()
