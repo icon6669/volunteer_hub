@@ -31,8 +31,8 @@ A web application for managing events and volunteer roles. This application allo
 
 3. Update the `.env` file with your Supabase credentials:
    ```plaintext
-   VITE_SUPABASE_URL=your-project-url
-   VITE_SUPABASE_ANON_KEY=your-anon-key
+   VITE_SUPABASE_URL=your_hosted_supabase_project_url
+   VITE_SUPABASE_ANON_KEY=your_hosted_supabase_anon_key
    ```
 
 4. Install dependencies:
@@ -43,6 +43,18 @@ A web application for managing events and volunteer roles. This application allo
 5. Start the development server:
    ```bash
    npm run dev
+   ```
+
+## Supabase Setup
+
+This project uses Supabase.com as its backend. We exclusively use the hosted Supabase instance - no local Supabase setup is required or supported.
+
+1. Create a new project on [Supabase.com](https://supabase.com)
+2. Get your project URL and anon key from the project settings
+3. Add these to your `.env` file
+4. Run the database migrations:
+   ```bash
+   npx supabase db push
    ```
 
 ## Docker Deployment
@@ -56,8 +68,8 @@ A web application for managing events and volunteer roles. This application allo
    ```bash
    docker run -d \
      -p 80:80 \
-     -e VITE_SUPABASE_URL=your-project-url \
-     -e VITE_SUPABASE_ANON_KEY=your-anon-key \
+     -e VITE_SUPABASE_URL=your_hosted_supabase_project_url \
+     -e VITE_SUPABASE_ANON_KEY=your_hosted_supabase_anon_key \
      --name volunteer-hub \
      volunteer-hub
    ```

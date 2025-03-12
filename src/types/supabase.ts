@@ -1,29 +1,4 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[];
-
-export enum UserRole {
-  OWNER = 'OWNER',
-  MANAGER = 'MANAGER',
-  VOLUNTEER = 'VOLUNTEER'
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  image?: string | null;
-  userRole: UserRole; // Maps to 'userrole' in the database
-  emailNotifications: boolean; // Maps to 'emailnotifications' in the database
-  unreadMessages: number; // Maps to 'unreadmessages' in the database
-  providerId: string | null; // Maps to 'providerid' in the database
-  createdAt?: string; // Maps to 'created_at' in the database
-  updatedAt?: string; // Maps to 'updated_at' in the database
-}
+import { UserRole } from './index';
 
 export interface Database {
   public: {
@@ -34,7 +9,7 @@ export interface Database {
           name: string;
           email: string;
           image: string | null;
-          user_role: 'OWNER' | 'MANAGER' | 'VOLUNTEER';
+          user_role: UserRole;
           email_notifications: boolean;
           unread_messages: number;
           provider_id: string | null;
@@ -46,7 +21,7 @@ export interface Database {
           name: string;
           email: string;
           image?: string | null;
-          user_role?: 'OWNER' | 'MANAGER' | 'VOLUNTEER';
+          user_role?: UserRole;
           email_notifications?: boolean;
           unread_messages?: number;
           provider_id?: string | null;
@@ -58,7 +33,7 @@ export interface Database {
           name?: string;
           email?: string;
           image?: string | null;
-          user_role?: 'OWNER' | 'MANAGER' | 'VOLUNTEER';
+          user_role?: UserRole;
           email_notifications?: boolean;
           unread_messages?: number;
           provider_id?: string | null;
@@ -190,6 +165,29 @@ export interface Database {
           event_id?: string;
           sender_id?: string;
           content?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      system_settings: {
+        Row: {
+          id: string;
+          key: string;
+          value: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          value: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          key?: string;
+          value?: string;
           created_at?: string;
           updated_at?: string;
         };

@@ -1,4 +1,4 @@
-import { User as SupabaseUser } from './supabase';
+import { Database } from './supabase';
 
 export enum UserRole {
   OWNER = 'OWNER',
@@ -7,89 +7,47 @@ export enum UserRole {
 }
 
 export enum LandingPageTheme {
-  DEFAULT = 'default',
-  DARK = 'dark',
   LIGHT = 'light',
+  DARK = 'dark',
   COLORFUL = 'colorful'
 }
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  image?: string;
-  userRole: UserRole;
-  emailNotifications: boolean;
-  unreadMessages: number;
-  providerId?: string;
-  created_at: string;
-  updated_at: string;
-}
+export type { Database } from './supabase';
 
-export interface SystemSettings {
-  id: string;
-  key: string;
-  value: string;
-  created_at: string;
-  updated_at: string;
-}
+export type DatabaseTables = Database['public']['Tables'];
 
-export interface Event {
-  id: string;
-  name: string;
-  description: string;
-  location: string;
-  start_date: string;
-  end_date: string;
-  created_at: string;
-  updated_at: string;
-  owner_id: string;
-}
+// Base types from database
+type DbUser = DatabaseTables['users']['Row'];
+type DbEvent = DatabaseTables['events']['Row'];
+type DbRole = DatabaseTables['roles']['Row'];
+type DbVolunteer = DatabaseTables['volunteers']['Row'];
+type DbMessage = DatabaseTables['messages']['Row'];
+type DbSystemSettings = DatabaseTables['system_settings']['Row'];
 
-export interface Role {
-  id: string;
-  event_id: string;
-  name: string;
-  description: string;
-  capacity: number;
-  max_capacity: number;
-  created_at: string;
-  updated_at: string;
-}
+// Application types with additional fields
+export type User = DbUser;
 
-export interface Volunteer {
-  id: string;
-  role_id: string;
-  user_id: string;
-  name: string;
-  email: string;
-  phone: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Message {
-  id: string;
-  event_id: string;
-  user_id: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Helper function to convert between Supabase and App types
-export const convertSupabaseUser = (supabaseUser: SupabaseUser): User => {
-  return {
-    id: supabaseUser.id,
-    name: supabaseUser.name,
-    email: supabaseUser.email,
-    image: supabaseUser.image || undefined,
-    userRole: supabaseUser.userRole,
-    emailNotifications: supabaseUser.emailNotifications,
-    unreadMessages: supabaseUser.unreadMessages,
-    providerId: supabaseUser.providerId || undefined,
-    created_at: supabaseUser.created_at,
-    updated_at: supabaseUser.updated_at
-  };
+export type Event = DbEvent & {
+  roles?: Role[];
 };
+
+export type Role = DbRole & {
+  volunteers?: Volunteer[];
+};
+
+export type Volunteer = DbVolunteer;
+
+export type Message = DbMessage;
+
+export type SystemSettings = DbSystemSettings;
+
+// Helper functions to transform between database and app types
+export const transformDatabaseUser = (dbUser: DbUser): User => dbUser;
+
+export const transformDatabaseEvent = (dbEvent: DbEvent): Event => dbEvent;
+
+export const transformDatabaseRole = (dbRole: DbRole): Role => dbRole;
+
+export const transformDatabaseVolunteer = (dbVolunteer: DbVolunteer): Volunteer => dbVolunteer;
+
+export const transformDatabaseMessage = (dbMessage: DbMessage): Message => dbMessage;
