@@ -1,4 +1,10 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export enum UserRole {
   OWNER = 'OWNER',
@@ -22,85 +28,41 @@ export interface User {
 export interface Database {
   public: {
     Tables: {
-      system_settings: {
-        Row: {
-          id: string;
-          google_auth_enabled: boolean;
-          google_client_id: string | null;
-          google_client_secret: string | null;
-          facebook_auth_enabled: boolean;
-          facebook_app_id: string | null;
-          facebook_app_secret: string | null;
-          organization_name: string;
-          organization_logo: string | null;
-          primary_color: string;
-          allow_public_event_viewing: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          google_auth_enabled?: boolean;
-          google_client_id?: string | null;
-          google_client_secret?: string | null;
-          facebook_auth_enabled?: boolean;
-          facebook_app_id?: string | null;
-          facebook_app_secret?: string | null;
-          organization_name?: string;
-          organization_logo?: string | null;
-          primary_color?: string;
-          allow_public_event_viewing?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          google_auth_enabled?: boolean;
-          google_client_id?: string | null;
-          google_client_secret?: string | null;
-          facebook_auth_enabled?: boolean;
-          facebook_app_id?: string | null;
-          facebook_app_secret?: string | null;
-          organization_name?: string;
-          organization_logo?: string | null;
-          primary_color?: string;
-          allow_public_event_viewing?: boolean;
-          updated_at?: string;
-        };
-      };
       users: {
         Row: {
           id: string;
           name: string;
           email: string;
           image: string | null;
-          userrole: string;
-          emailnotifications: boolean;
-          unreadmessages: number;
-          providerid: string | null;
+          user_role: 'OWNER' | 'MANAGER' | 'VOLUNTEER';
+          email_notifications: boolean;
+          unread_messages: number;
+          provider_id: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          id: string;
+          id?: string;
           name: string;
           email: string;
           image?: string | null;
-          userrole?: string;
-          emailnotifications?: boolean;
-          unreadmessages?: number;
-          providerid?: string | null;
+          user_role?: 'OWNER' | 'MANAGER' | 'VOLUNTEER';
+          email_notifications?: boolean;
+          unread_messages?: number;
+          provider_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          id?: string;
           name?: string;
           email?: string;
           image?: string | null;
-          userrole?: string;
-          emailnotifications?: boolean;
-          unreadmessages?: number;
-          providerid?: string | null;
+          user_role?: 'OWNER' | 'MANAGER' | 'VOLUNTEER';
+          email_notifications?: boolean;
+          unread_messages?: number;
+          provider_id?: string | null;
+          created_at?: string;
           updated_at?: string;
         };
       };
@@ -108,44 +70,34 @@ export interface Database {
         Row: {
           id: string;
           name: string;
-          date: string;
-          location: string;
-          description: string;
-          landing_page_enabled: boolean;
-          landing_page_title: string;
-          landing_page_description: string;
-          landing_page_image: string | null;
-          landing_page_theme: string;
-          custom_url: string | null;
+          description: string | null;
+          location: string | null;
+          start_date: string;
+          end_date: string;
+          owner_id: string;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           name: string;
-          date: string;
-          location: string;
-          description: string;
-          landing_page_enabled?: boolean;
-          landing_page_title?: string;
-          landing_page_description?: string;
-          landing_page_image?: string | null;
-          landing_page_theme?: string;
-          custom_url?: string | null;
+          description?: string | null;
+          location?: string | null;
+          start_date: string;
+          end_date: string;
+          owner_id: string;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          id?: string;
           name?: string;
-          date?: string;
-          location?: string;
-          description?: string;
-          landing_page_enabled?: boolean;
-          landing_page_title?: string;
-          landing_page_description?: string;
-          landing_page_image?: string | null;
-          landing_page_theme?: string;
-          custom_url?: string | null;
+          description?: string | null;
+          location?: string | null;
+          start_date?: string;
+          end_date?: string;
+          owner_id?: string;
+          created_at?: string;
           updated_at?: string;
         };
       };
@@ -154,7 +106,7 @@ export interface Database {
           id: string;
           event_id: string;
           name: string;
-          description: string;
+          description: string | null;
           capacity: number;
           max_capacity: number;
           created_at: string;
@@ -164,18 +116,20 @@ export interface Database {
           id?: string;
           event_id: string;
           name: string;
-          description: string;
+          description?: string | null;
           capacity?: number;
-          max_capacity?: number;
+          max_capacity: number;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          id?: string;
           event_id?: string;
           name?: string;
-          description?: string;
+          description?: string | null;
           capacity?: number;
           max_capacity?: number;
+          created_at?: string;
           updated_at?: string;
         };
       };
@@ -183,9 +137,10 @@ export interface Database {
         Row: {
           id: string;
           role_id: string;
+          user_id: string;
           name: string;
           email: string;
-          phone: string;
+          phone: string | null;
           description: string | null;
           created_at: string;
           updated_at: string;
@@ -193,52 +148,49 @@ export interface Database {
         Insert: {
           id?: string;
           role_id: string;
+          user_id: string;
           name: string;
           email: string;
-          phone: string;
+          phone?: string | null;
           description?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          id?: string;
           role_id?: string;
+          user_id?: string;
           name?: string;
           email?: string;
-          phone?: string;
+          phone?: string | null;
           description?: string | null;
+          created_at?: string;
           updated_at?: string;
         };
       };
       messages: {
         Row: {
           id: string;
+          event_id: string;
           sender_id: string;
-          recipient_id: string;
-          subject: string;
           content: string;
-          timestamp: string;
-          read: boolean;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
+          event_id: string;
           sender_id: string;
-          recipient_id: string;
-          subject: string;
           content: string;
-          timestamp: string;
-          read?: boolean;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
+          id?: string;
+          event_id?: string;
           sender_id?: string;
-          recipient_id?: string;
-          subject?: string;
           content?: string;
-          timestamp?: string;
-          read?: boolean;
+          created_at?: string;
           updated_at?: string;
         };
       };

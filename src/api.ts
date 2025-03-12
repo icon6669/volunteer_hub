@@ -1,25 +1,26 @@
 import { Event, Message, SystemSettings, User, UserRole } from './types';
-import { supabase } from './supabase';
+import { supabase, handleDbError } from './lib/supabase';
+import type { Session } from '@supabase/supabase-js';
 
 // Settings API
 export const fetchSettings = async (): Promise<SystemSettings> => {
   try {
-    if (supabase) {
-      // Try to fetch from Supabase if connected
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('*')
-        .single();
-      
-      if (error) {
-        console.error('Error fetching settings from Supabase:', error);
-        throw error;
-      }
-      
-      return data;
-    } else {
+    if (!supabase) {
       throw new Error('Supabase not connected');
     }
+    
+    // Try to fetch from Supabase if connected
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('*')
+      .single();
+    
+    if (error) {
+      console.error('Error fetching settings from Supabase:', error);
+      throw error;
+    }
+    
+    return data;
   } catch (error) {
     console.error('Failed to fetch settings:', error);
     // Return default settings if Supabase fetch fails
@@ -319,7 +320,7 @@ export const fetchEvents = async (): Promise<Event[]> => {
           name: role.name,
           description: role.description,
           capacity: role.capacity,
-          maxCapacity: role.max_capacity,
+          maxCapacity: role.maxCapacity,
           volunteers: volunteersData.map(v => ({
             id: v.id,
             name: v.name,
@@ -338,11 +339,11 @@ export const fetchEvents = async (): Promise<Event[]> => {
         location: event.location,
         description: event.description,
         landingPageEnabled: event.landing_page_enabled,
-        landingPageTitle: event.landing_page_title,
-        landingPageDescription: event.landing_page_description,
-        landingPageImage: event.landing_page_image,
-        landingPageTheme: event.landing_page_theme,
-        customUrl: event.custom_url,
+        landingPageTitle: event.landingPageTitle,
+        landingPageDescription: event.landingPageDescription,
+        landingPageImage: event.landingPageImage,
+        landingPageTheme: event.landingPageTheme,
+        customUrl: event.customUrl,
         roles: rolesWithVolunteers
       };
     }));
@@ -627,4 +628,18 @@ export const deleteMessage = async (messageId: string): Promise<boolean> => {
     console.error('Error deleting message:', error);
     return false;
   }
+};
+
+export const signUp = async (email: string, password: string): Promise<Session | null> => {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  if (error) {
+    handleDbError(error, 'signUp');
+    return null;
+  }
+
+  return data.session;
 };
