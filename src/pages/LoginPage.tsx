@@ -6,6 +6,7 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSignUp, setIsSignUp] = useState(false);
   const navigate = useNavigate();
 
   const { 
@@ -26,8 +27,16 @@ const LoginPage: React.FC = () => {
     setError(null);
 
     try {
-      await signIn(email, password);
-      navigate('/dashboard');
+      if (isSignUp) {
+        // Handle sign up
+        await signUp(email, password);
+        // Show success message
+        alert('Sign up successful! Please check your email for verification.');
+      } else {
+        // Handle sign in
+        await signIn(email, password);
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     }
@@ -41,7 +50,7 @@ const LoginPage: React.FC = () => {
     <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign in to your account
+          {isSignUp ? 'Create a new account' : 'Sign in to your account'}
         </h2>
       </div>
 
@@ -81,7 +90,7 @@ const LoginPage: React.FC = () => {
                   id="password"
                   name="password"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -95,17 +104,17 @@ const LoginPage: React.FC = () => {
                 type="submit"
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                Sign in
+                {isSignUp ? 'Sign up' : 'Sign in'}
               </button>
             </div>
           </form>
 
           <div className="mt-6">
             <button
-              onClick={() => signUp(email, password)}
+              onClick={() => setIsSignUp(!isSignUp)}
               className="w-full text-center text-sm text-green-600 hover:text-green-500"
             >
-              Need an account? Sign up
+              {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
             </button>
           </div>
         </div>

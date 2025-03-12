@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SystemSettings } from '../types';
-import * as api from '../api';
+import { services } from '../services';
 
 interface SettingsContextType {
   settings: SystemSettings;
@@ -47,7 +47,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       try {
         setIsLoading(true);
         setError(null);
-        const loadedSettings = await api.fetchSettings();
+        const loadedSettings = await services.settings.getSettings();
         setSettings(loadedSettings);
       } catch (err) {
         console.error('Failed to load settings:', err instanceof Error ? err.message : 'Unknown error');
@@ -67,13 +67,14 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         ...newSettings,
       };
       
-      const success = await api.saveSettings(updatedSettings);
+      const savedSettings = await services.settings.updateSettings(updatedSettings);
       
-      if (success) {
-        setSettings(updatedSettings);
+      if (savedSettings) {
+        setSettings(savedSettings);
+        return true;
       }
       
-      return success;
+      return false;
     } catch (err) {
       console.error('Failed to update settings:', err instanceof Error ? err.message : 'Unknown error');
       return false;

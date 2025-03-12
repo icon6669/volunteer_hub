@@ -1,12 +1,15 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Database } from '../types/supabase';
+import { CacheService, cacheService } from './CacheService';
 
 export class BaseService {
   protected readonly supabase: SupabaseClient<Database>;
+  protected readonly cache: CacheService;
 
   constructor() {
     this.supabase = supabase;
+    this.cache = cacheService;
   }
 
   protected async handleQuery<T>(

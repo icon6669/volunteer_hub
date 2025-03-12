@@ -18,7 +18,7 @@ import DashboardPage from './pages/DashboardPage';
 import InboxPage from './pages/InboxPage';
 import ComposeMessagePage from './pages/ComposeMessagePage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
-import SupabaseSetupPage from './pages/SupabaseSetupPage';
+
 
 // Protected route component
 const ProtectedRoute: React.FC<{ element: React.ReactNode; requiresManager?: boolean; requiresOwner?: boolean }> = ({ 
@@ -179,15 +179,7 @@ function AppContent() {
           </div>
         } />
         
-        <Route path="/supabase-setup" element={
-          <div className="flex flex-col min-h-screen bg-gray-50">
-            <Header />
-            <main className="flex-grow">
-              <ProtectedRoute element={<SupabaseSetupPage />} requiresOwner={true} />
-            </main>
-            <Footer />
-          </div>
-        } />
+
       </Routes>
     </Router>
   );

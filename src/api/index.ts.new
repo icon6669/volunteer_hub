@@ -1,0 +1,283 @@
+import { Event, Message, SystemSettings, User, UserRole } from '../types';
+import { supabase } from '../lib/supabase';
+import { services } from '../services';
+
+// Temporary function to check database policies - remove after debugging
+export const checkDatabasePolicies = async () => {
+  try {
+    // First, test if we can fetch users
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, name, email, userrole')
+      .limit(5);
+      
+    // Try to call the get_auth_user_role function if it exists
+    let roleResult = {};
+    try {
+      const { data: userRole, error: roleError } = await supabase.rpc('get_auth_user_role');
+      roleResult = { functionExists: !roleError, userRole, functionError: roleError };
+    } catch (e) {
+      roleResult = { functionExists: false, functionError: e };
+    }
+    
+    return {
+      usersSuccess: !usersError,
+      usersList: users,
+      usersError: usersError,
+      ...roleResult
+    };
+  } catch (error) {
+    console.error('Policy check error:', error);
+    return { error };
+  }
+};
+
+// Define the response type for fetchUsers
+export interface UsersResponse {
+  users: User[];
+  needsOwner: boolean;
+}
+
+// Type for the raw user data from Supabase
+interface RawUser {
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+  userrole: string;
+  emailnotifications: boolean;
+  unreadmessages: number;
+  providerid?: string;
+}
+
+// Helper function to handle database errors
+const handleDbError = (error: any, operation: string) => {
+  console.error(`Error ${operation}:`, error);
+  throw new Error(`Failed to ${operation}: ${error.message}`);
+};
+
+// Settings API
+export const fetchSettings = async (): Promise<SystemSettings> => {
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('*')
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      googleAuthEnabled: data.google_auth_enabled,
+      googleClientId: data.google_client_id || '',
+      googleClientSecret: data.google_client_secret || '',
+      facebookAuthEnabled: data.facebook_auth_enabled,
+      facebookAppId: data.facebook_app_id || '',
+      facebookAppSecret: data.facebook_app_secret || '',
+      organizationName: data.organization_name,
+      organizationLogo: data.organization_logo || '',
+      primaryColor: data.primary_color,
+      allowPublicEventViewing: data.allow_public_event_viewing,
+    };
+  } catch (error) {
+    handleDbError(error, 'fetch settings');
+    // This line won't be reached due to handleDbError throwing
+    return {} as SystemSettings;
+  }
+};
+
+export const saveSettings = async (settings: SystemSettings): Promise<boolean> => {
+  try {
+    const { data: existingSettings } = await supabase
+      .from('system_settings')
+      .select('id')
+      .single();
+    
+    const dbSettings = {
+      google_auth_enabled: settings.googleAuthEnabled,
+      google_client_id: settings.googleClientId,
+      google_client_secret: settings.googleClientSecret,
+      facebook_auth_enabled: settings.facebookAuthEnabled,
+      facebook_app_id: settings.facebookAppId,
+      facebook_app_secret: settings.facebookAppSecret,
+      organization_name: settings.organizationName,
+      organization_logo: settings.organizationLogo,
+      primary_color: settings.primaryColor,
+      allow_public_event_viewing: settings.allowPublicEventViewing,
+    };
+
+    const { error } = existingSettings
+      ? await supabase
+          .from('system_settings')
+          .update(dbSettings)
+          .eq('id', existingSettings.id)
+      : await supabase
+          .from('system_settings')
+          .insert([dbSettings]);
+    
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    handleDbError(error, 'save settings');
+    return false;
+  }
+};
+
+// Helper function to check if an owner exists
+export const checkOwnerExists = async (): Promise<boolean> => {
+  try {
+    const { count, error } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('userrole', UserRole.OWNER);
+    
+    if (error) throw error;
+    return count ? count > 0 : false;
+  } catch (error) {
+    handleDbError(error, 'check owner exists');
+    return false;
+  }
+};
+
+// Users API
+/**
+ * Fetches all users and checks if an owner exists
+ * @returns A UsersResponse object containing users and needsOwner flag
+ */
+export const fetchUsers = async (): Promise<UsersResponse> => {
+  try {
+    // Get the current authenticated user first
+    const { data: authData } = await supabase.auth.getSession();
+    const currentUserId = authData?.session?.user?.id;
+    
+    if (!currentUserId) {
+      console.warn('No authenticated user found');
+      return { users: [], needsOwner: false };
+    }
+    
+    // In case of RLS recursion issues, use this SQL query approach
+    // This uses PostgreSQL's security barrier views to avoid recursion
+    const { data: users, error } = await supabase.rpc('get_users_safely');
+    
+    if (error) {
+      console.warn('RPC method failed, trying direct query for current user', error);
+      
+      // Fall back to just getting the current user if the RPC fails
+      const { data: currentUser, error: currentUserError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', currentUserId)
+        .single();
+      
+      if (currentUserError) {
+        console.error('Failed to fetch current user:', currentUserError);
+        throw currentUserError;
+      }
+      
+      // Convert to our application User type
+      const appUser: User = {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        image: currentUser.image || undefined,
+        userRole: currentUser.userrole === UserRole.OWNER 
+          ? UserRole.OWNER 
+          : currentUser.userrole === UserRole.MANAGER 
+            ? UserRole.MANAGER 
+            : UserRole.VOLUNTEER,
+        emailNotifications: currentUser.emailnotifications,
+        unreadMessages: currentUser.unreadmessages,
+        providerId: currentUser.providerid
+      };
+      
+      // Return just the current user
+      return {
+        users: [appUser],
+        needsOwner: currentUser.userrole !== UserRole.OWNER
+      };
+    }
+    
+    // If we get here, the RPC call succeeded
+    // Convert all users to our application User type
+    const appUsers: User[] = (users || []).map((user: RawUser) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      userRole: user.userrole === UserRole.OWNER 
+        ? UserRole.OWNER 
+        : user.userrole === UserRole.MANAGER 
+          ? UserRole.MANAGER 
+          : UserRole.VOLUNTEER,
+      emailNotifications: user.emailnotifications,
+      unreadMessages: user.unreadmessages,
+      providerId: user.providerid
+    }));
+    
+    // Check if any user is an owner
+    const hasOwner = appUsers.some(user => user.userRole === UserRole.OWNER);
+    
+    return {
+      users: appUsers,
+      needsOwner: !hasOwner
+    };
+  } catch (error) {
+    handleDbError(error, 'fetch users');
+    return { users: [], needsOwner: false };
+  }
+};
+
+// Events API
+/**
+ * Fetch events using the EventService
+ */
+export const fetchEvents = async (): Promise<Event[]> => {
+  try {
+    return await services.events.getEvents();
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    throw error;
+  }
+};
+
+/**
+ * Save an event using the EventService
+ */
+export const saveEvent = async (event: Event): Promise<Event> => {
+  try {
+    // For new events (create)
+    if (!event.id) {
+      return await services.events.createEvent(event);
+    }
+    // For existing events (update)
+    return await services.events.updateEvent(event.id, event);
+  } catch (error) {
+    console.error('Error saving event:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update an event using the EventService
+ */
+export const updateEvent = async (event: Event): Promise<boolean> => {
+  try {
+    await services.events.updateEvent(event.id, event);
+    return true;
+  } catch (error) {
+    console.error('Error updating event:', error);
+    return false;
+  }
+};
+
+/**
+ * Delete an event using the EventService
+ */
+export const deleteEvent = async (eventId: string): Promise<boolean> => {
+  try {
+    await services.events.deleteEvent(eventId);
+    return true;
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    return false;
+  }
+};

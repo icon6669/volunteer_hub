@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { Message, MessageFormData, MessageRecipientType } from '../types';
 import { useAuth } from './AuthContext';
 import { useAppContext } from './AppContext';
-import * as api from '../api';
+import { services } from '../services';
+import { Database } from '../types/supabase';
+import { supabase } from '../lib/supabase';
+
+type DbUser = Database['public']['Tables']['users']['Row'];
 
 interface MessageContextType {
   messages: Message[];
@@ -34,9 +37,28 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [users, setUsers] = useState<DbUser[]>([]);
 
-  const { user, users, incrementUnreadMessages } = useAuth();
+  const { user } = useAuth();
   const { events } = useAppContext();
+
+  // Load users
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*');
+        
+        if (error) throw error;
+        if (data) setUsers(data);
+      } catch (err) {
+        console.error('Error loading users:', err);
+      }
+    };
+    
+    loadUsers();
+  }, []);
 
   // Load messages from server
   useEffect(() => {
@@ -50,9 +72,22 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
         setIsLoading(true);
         setError(null);
         
-        // Fetch messages for the current user
-        const fetchedMessages = await api.fetchMessages(user.id);
-        setMessages(fetchedMessages);
+        // Fetch messages for the current user using MessageService
+        const fetchedMessages = await services.messages.getMessages(user.id);
+        
+        // Transform database messages to application Message type
+        const transformedMessages: Message[] = fetchedMessages.map(msg => ({
+          id: msg.id,
+          senderId: msg.sender_id,
+          eventId: msg.event_id,
+          recipientId: '',  // Default empty string for optional properties
+          subject: '',      // Default empty string for optional properties
+          content: msg.content,
+          timestamp: msg.created_at,
+          read: false
+        }));
+        
+        setMessages(transformedMessages);
       } catch (err) {
         console.error('Error loading messages:', err instanceof Error ? err.message : 'Unknown error');
         setError('Failed to load messages');
@@ -67,8 +102,7 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
   const sendMessage = async (messageData: MessageFormData): Promise<boolean> => {
     if (!user) return false;
 
-    const { recipientType, recipientId, eventId, roleId, subject, content } = messageData;
-    const timestamp = new Date().toISOString();
+    const { recipientType, recipientId, eventId, roleId, content } = messageData;
     
     let recipientIds: string[] = [];
 
@@ -85,16 +119,16 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
           if (event) {
             // Get all unique volunteer IDs from this event
             const volunteerEmails = new Set<string>();
-            event.roles.forEach(role => {
-              role.volunteers.forEach(volunteer => {
+            event.roles?.forEach(role => {
+              role.volunteers?.forEach(volunteer => {
                 volunteerEmails.add(volunteer.email);
               });
             });
             
             // Find user IDs matching these emails
             recipientIds = users
-              .filter(u => volunteerEmails.has(u.email))
-              .map(u => u.id);
+              .filter((u: DbUser) => volunteerEmails.has(u.email))
+              .map((u: DbUser) => u.id);
           }
         }
         break;
@@ -103,15 +137,15 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
         if (eventId && roleId) {
           const event = events.find(e => e.id === eventId);
           if (event) {
-            const role = event.roles.find(r => r.id === roleId);
+            const role = event.roles?.find(r => r.id === roleId);
             if (role) {
               // Get all volunteer emails from this role
-              const volunteerEmails = role.volunteers.map(v => v.email);
+              const volunteerEmails = role.volunteers?.map(v => v.email) || [];
               
               // Find user IDs matching these emails
               recipientIds = users
-                .filter(u => volunteerEmails.includes(u.email))
-                .map(u => u.id);
+                .filter((u: DbUser) => volunteerEmails.includes(u.email))
+                .map((u: DbUser) => u.id);
             }
           }
         }
@@ -120,35 +154,40 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
       case MessageRecipientType.ALL:
         // Send to all volunteers
         recipientIds = users
-          .filter(u => u.id !== user.id)
-          .map(u => u.id);
+          .filter((u: DbUser) => u.id !== user.id)
+          .map((u: DbUser) => u.id);
         break;
     }
 
     try {
       // Create a new message for each recipient
-      const newMessages: Message[] = recipientIds.map(recipientId => ({
-        id: uuidv4(),
+      const messagesToSave = recipientIds.map(() => ({
         senderId: user.id,
-        recipientId: recipientId,
-        subject,
-        content,
-        timestamp,
-        read: false
+        eventId: eventId || '',
+        content
       }));
 
-      if (newMessages.length > 0) {
-        // Save messages to server
-        const success = await api.saveMessages(newMessages);
+      if (messagesToSave.length > 0) {
+        // Save messages to server using MessageService
+        const success = await services.messages.saveMessages(messagesToSave);
         
         if (success) {
-          // Update local state
-          setMessages(prev => [...prev, ...newMessages]);
+          // Reload messages to get the updated list
+          const updatedMessages = await services.messages.getMessages(user.id);
           
-          // Increment unread count for each recipient
-          for (const id of recipientIds) {
-            await incrementUnreadMessages(id);
-          }
+          // Transform database messages to application Message type
+          const transformedMessages: Message[] = updatedMessages.map(msg => ({
+            id: msg.id,
+            senderId: msg.sender_id,
+            eventId: msg.event_id,
+            recipientId: '',  // Default empty string for optional properties
+            subject: '',      // Default empty string for optional properties
+            content: msg.content,
+            timestamp: msg.created_at,
+            read: false
+          }));
+          
+          setMessages(transformedMessages);
           
           return true;
         }
@@ -163,8 +202,8 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
 
   const markAsRead = async (messageId: string): Promise<boolean> => {
     try {
-      // Mark message as read on server
-      const success = await api.markMessageAsRead(messageId);
+      // Mark message as read on server using MessageService
+      const success = await services.messages.markAsRead(messageId);
       
       if (success) {
         // Update local state
@@ -186,8 +225,8 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
 
   const deleteMessage = async (messageId: string): Promise<boolean> => {
     try {
-      // Delete message on server
-      const success = await api.deleteMessage(messageId);
+      // Delete message on server using MessageService
+      const success = await services.messages.deleteMessage(messageId);
       
       if (success) {
         // Update local state
@@ -203,11 +242,11 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
   };
 
   const getUserMessages = (userId: string): Message[] => {
-    return messages.filter(message => message.recipientId === userId);
+    return messages.filter(message => message.senderId === userId);
   };
 
   const getUnreadCount = (userId: string): number => {
-    return messages.filter(message => message.recipientId === userId && !message.read).length;
+    return messages.filter(message => message.senderId === userId && !message.read).length;
   };
 
   return (

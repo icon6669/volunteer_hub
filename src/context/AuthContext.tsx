@@ -6,6 +6,10 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isManager: boolean;
+  isOwner: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -17,6 +21,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isManager, setIsManager] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     // Get initial session
@@ -24,6 +30,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      // If user exists, check their role
+      if (session?.user) {
+        checkUserRole(session.user.id);
+      }
     });
 
     // Listen for auth changes
@@ -31,10 +42,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      // If user exists, check their role
+      if (session?.user) {
+        checkUserRole(session.user.id);
+      } else {
+        setIsManager(false);
+        setIsOwner(false);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const checkUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user role:', error);
+        return;
+      }
+      
+      if (data) {
+        setIsManager(data.role === 'manager' || data.role === 'owner');
+        setIsOwner(data.role === 'owner');
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error);
+    }
+  };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -55,6 +96,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     session,
     loading,
+    isAuthenticated: !!user,
+    isLoading: loading,
+    isManager,
+    isOwner,
     signIn,
     signUp,
     signOut,

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { v4 as uuidv4 } from 'uuid';
 import { Event, Role, Volunteer } from '../types';
 import { useAuth } from './AuthContext';
-import * as api from '../api';
+import { services } from '../services';
 
 interface AppContextType {
   events: Event[];
@@ -44,7 +44,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setIsLoading(true);
         setError(null);
         
-        const fetchedEvents = await api.fetchEvents();
+        const fetchedEvents = await services.events.getEvents();
         setEvents(fetchedEvents);
       } catch (err) {
         console.error('Error loading data:', err instanceof Error ? err.message : 'Unknown error');
@@ -71,12 +71,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       };
       
       // Save to server
-      const savedEvent = await api.saveEvent(newEvent);
+      const savedEvent = await services.events.createEvent(newEvent);
       
       if (savedEvent) {
         // Update local state
-        setEvents(prev => [...prev, newEvent]);
-        return newEventId;
+        setEvents(prev => [...prev, savedEvent]);
+        return savedEvent.id;
       }
       
       return null;
@@ -89,12 +89,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const updateEvent = async (updatedEvent: Event): Promise<boolean> => {
     try {
       // Update on server
-      const success = await api.updateEvent(updatedEvent);
+      const savedEvent = await services.events.updateEvent(updatedEvent.id, updatedEvent);
       
-      if (success) {
+      if (savedEvent) {
         // Update local state
         setEvents(prev => prev.map(event => 
-          event.id === updatedEvent.id ? updatedEvent : event
+          event.id === savedEvent.id ? savedEvent : event
         ));
         return true;
       }
@@ -109,15 +109,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const deleteEvent = async (eventId: string): Promise<boolean> => {
     try {
       // Delete from server
-      const success = await api.deleteEvent(eventId);
+      await services.events.deleteEvent(eventId);
       
-      if (success) {
-        // Update local state
-        setEvents(prev => prev.filter(event => event.id !== eventId));
-        return true;
-      }
-      
-      return false;
+      // Update local state
+      setEvents(prev => prev.filter(event => event.id !== eventId));
+      return true;
     } catch (error) {
       console.error('Error deleting event:', error instanceof Error ? error.message : 'Unknown error');
       return false;
@@ -149,13 +145,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       };
       
       // Update on server
-      const success = await api.updateEvent(updatedEvent);
+      const savedEvent = await services.events.updateEvent(eventId, updatedEvent);
       
-      if (success) {
+      if (savedEvent) {
         // Update local state
         setEvents(prev => prev.map(event => {
           if (event.id === eventId) {
-            return updatedEvent;
+            return savedEvent;
           }
           return event;
         }));
@@ -188,13 +184,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       };
       
       // Update on server
-      const success = await api.updateEvent(updatedEvent);
+      const savedEvent = await services.events.updateEvent(eventId, updatedEvent);
       
-      if (success) {
+      if (savedEvent) {
         // Update local state
         setEvents(prev => prev.map(event => {
           if (event.id === eventId) {
-            return updatedEvent;
+            return savedEvent;
           }
           return event;
         }));
@@ -225,13 +221,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       };
       
       // Update on server
-      const success = await api.updateEvent(updatedEvent);
+      const savedEvent = await services.events.updateEvent(eventId, updatedEvent);
       
-      if (success) {
+      if (savedEvent) {
         // Update local state
         setEvents(prev => prev.map(event => {
           if (event.id === eventId) {
-            return updatedEvent;
+            return savedEvent;
           }
           return event;
         }));
@@ -268,28 +264,35 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         return null;
       }
       
-      // Create updated event with new volunteer in the specified role
+      // Find the role to update
+      const roleToUpdate = eventToUpdate.roles.find(r => r.id === roleId);
+      
+      if (!roleToUpdate) {
+        return null;
+      }
+      
+      // Create updated role with new volunteer
+      const updatedRole: Role = {
+        ...roleToUpdate,
+        volunteers: [...roleToUpdate.volunteers, newVolunteer],
+      };
+      
+      // Create updated event with updated role
       const updatedEvent: Event = {
         ...eventToUpdate,
-        roles: eventToUpdate.roles.map(role => {
-          if (role.id === roleId) {
-            return {
-              ...role,
-              volunteers: [...role.volunteers, newVolunteer],
-            };
-          }
-          return role;
-        }),
+        roles: eventToUpdate.roles.map(role => 
+          role.id === roleId ? updatedRole : role
+        ),
       };
       
       // Update on server
-      const success = await api.updateEvent(updatedEvent);
+      const savedEvent = await services.events.updateEvent(eventId, updatedEvent);
       
-      if (success) {
+      if (savedEvent) {
         // Update local state
         setEvents(prev => prev.map(event => {
           if (event.id === eventId) {
-            return updatedEvent;
+            return savedEvent;
           }
           return event;
         }));
@@ -316,7 +319,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         deleteRole,
         addVolunteer,
         isLoading,
-        error
+        error,
       }}
     >
       {children}
