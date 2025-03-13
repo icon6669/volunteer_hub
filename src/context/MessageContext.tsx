@@ -161,9 +161,10 @@ export const MessageProvider: React.FC<MessageProviderProps> = ({ children }) =>
 
     try {
       // Create a new message for each recipient
-      const messagesToSave = recipientIds.map(() => ({
+      const messagesToSave = recipientIds.map(recipientId => ({
         senderId: user.id,
         eventId: eventId || '',
+        recipientId,
         content
       }));
 

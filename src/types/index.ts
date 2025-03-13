@@ -1,4 +1,4 @@
-import { Database } from './supabase';
+import type { Database } from './supabase';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -20,19 +20,28 @@ export enum MessageRecipientType {
   ALL = 'all'
 }
 
-export type { Database } from './supabase';
-
 export type DatabaseTables = Database['public']['Tables'];
 
 // Base types from database
 type DbUser = DatabaseTables['users']['Row'];
 type DbEvent = DatabaseTables['events']['Row'];
 type DbRole = DatabaseTables['roles']['Row'];
-type DbVolunteer = DatabaseTables['volunteers']['Row'];
 type DbMessage = DatabaseTables['messages']['Row'];
+export type DbVolunteer = DatabaseTables['volunteers']['Row'];
 
 // Application types with additional fields
-export type User = DbUser;
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  userRole: UserRole;
+  emailNotifications: boolean;
+  unreadMessages: number;
+  providerId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // Extended user type for UI components that need additional user information
 export interface ExtendedUser {
@@ -41,8 +50,8 @@ export interface ExtendedUser {
   user_role?: UserRole;
   emailNotifications?: boolean;
   image?: string;
-  created_at?: string;
-  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type Event = DbEvent & {
@@ -53,7 +62,33 @@ export type Role = DbRole & {
   volunteers?: Volunteer[];
 };
 
-export type Volunteer = DbVolunteer;
+// Define Volunteer interface with camelCase properties
+export interface Volunteer {
+  id: string;
+  roleId: string;
+  userId: string;
+  name: string;
+  email: string;
+  phone: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Helper function to transform database volunteer to application volunteer
+export function transformDatabaseVolunteer(dbVolunteer: DbVolunteer): Volunteer {
+  return {
+    id: dbVolunteer.id,
+    roleId: dbVolunteer.role_id,
+    userId: dbVolunteer.user_id,
+    name: dbVolunteer.name,
+    email: dbVolunteer.email,
+    phone: dbVolunteer.phone || '',
+    description: dbVolunteer.description || '',
+    createdAt: dbVolunteer.created_at,
+    updatedAt: dbVolunteer.updated_at
+  };
+}
 
 // Message type with additional read property
 export interface Message {
@@ -92,7 +127,18 @@ export type SystemSettings = {
 
 // Helper functions to transform between database and app types
 export function transformDatabaseUser(dbUser: DbUser): User {
-  return dbUser;
+  return {
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email,
+    image: dbUser.image || undefined,
+    userRole: dbUser.user_role as UserRole,
+    emailNotifications: dbUser.email_notifications,
+    unreadMessages: dbUser.unread_messages,
+    providerId: dbUser.provider_id || undefined,
+    createdAt: dbUser.created_at,
+    updatedAt: dbUser.updated_at
+  };
 }
 
 export function transformDatabaseEvent(dbEvent: DbEvent): Event {
@@ -101,10 +147,6 @@ export function transformDatabaseEvent(dbEvent: DbEvent): Event {
 
 export function transformDatabaseRole(dbRole: DbRole): Role {
   return { ...dbRole, volunteers: [] };
-}
-
-export function transformDatabaseVolunteer(dbVolunteer: DbVolunteer): Volunteer {
-  return dbVolunteer;
 }
 
 export function transformDatabaseMessage(dbMessage: DbMessage): Message {

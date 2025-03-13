@@ -26,6 +26,8 @@ export class MessageService extends BaseService {
     senderId: string;
     eventId: string;
     content: string;
+    recipientId?: string;
+    subject?: string;
   }): Promise<DbMessage | null> {
     try {
       const dbMessage = {
@@ -33,6 +35,9 @@ export class MessageService extends BaseService {
         sender_id: message.senderId,
         event_id: message.eventId,
         content: message.content,
+        recipient_id: message.recipientId || null,
+        subject: message.subject || null,
+        read: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -55,6 +60,8 @@ export class MessageService extends BaseService {
     senderId: string;
     eventId: string;
     content: string;
+    recipientId?: string;
+    subject?: string;
   }[]): Promise<boolean> {
     try {
       const dbMessages = messages.map(message => ({
@@ -62,6 +69,9 @@ export class MessageService extends BaseService {
         sender_id: message.senderId,
         event_id: message.eventId,
         content: message.content,
+        recipient_id: message.recipientId || null,
+        subject: message.subject || null,
+        read: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));

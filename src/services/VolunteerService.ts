@@ -20,14 +20,15 @@ export class VolunteerService extends BaseService {
       }
     }
 
-    const volunteers = await this.handleQuery<Database['public']['Tables']['volunteers']['Row'][]>(
-      () => this.client.from(this.TABLE)
-        .select('*')
-        .eq('role_id', roleId),
-      'getVolunteers'
-    );
+    const { data: volunteers } = await this.client.from(this.TABLE)
+      .select('*')
+      .eq('role_id', roleId);
 
-    const transformedVolunteers = volunteers.map(this.transformVolunteer);
+    if (!volunteers) {
+      return [];
+    }
+
+    const transformedVolunteers = volunteers.map(volunteer => this.transformVolunteer(volunteer));
     
     // Cache the results
     localStorage.setItem(cacheKey, JSON.stringify({
@@ -38,7 +39,7 @@ export class VolunteerService extends BaseService {
     return transformedVolunteers;
   }
 
-  async getVolunteer(id: string): Promise<Volunteer> {
+  async getVolunteer(id: string): Promise<Volunteer | null> {
     const cacheKey = `${this.CACHE_PREFIX}${id}`;
     
     // Try cache first
@@ -51,13 +52,14 @@ export class VolunteerService extends BaseService {
       }
     }
 
-    const volunteer = await this.handleQuery<Database['public']['Tables']['volunteers']['Row']>(
-      () => this.client.from(this.TABLE)
-        .select('*')
-        .eq('id', id)
-        .single(),
-      'getVolunteer'
-    );
+    const { data: volunteer } = await this.client.from(this.TABLE)
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!volunteer) {
+      return null;
+    }
 
     const transformedVolunteer = this.transformVolunteer(volunteer);
     
@@ -66,74 +68,110 @@ export class VolunteerService extends BaseService {
       data: transformedVolunteer,
       timestamp: Date.now()
     }));
-
+    
     return transformedVolunteer;
   }
 
-  async createVolunteer(volunteer: Omit<Volunteer, 'id' | 'created_at' | 'updated_at'>): Promise<Volunteer> {
-    const newVolunteer = await this.handleQuery<Database['public']['Tables']['volunteers']['Row']>(
-      () => this.client.from(this.TABLE).insert([{
-        role_id: volunteer.role_id,
-        name: volunteer.name,
-        email: volunteer.email,
-        phone: volunteer.phone,
-        description: volunteer.description
-      }]).select().single(),
-      'createVolunteer'
-    );
+  async createVolunteer(data: {
+    roleId: string;
+    userId: string;
+    name: string;
+    email: string;
+    phone: string;
+    description: string;
+  }): Promise<Volunteer> {
+    // Map from application type (camelCase) to database type (snake_case)
+    const dbVolunteer = {
+      role_id: data.roleId,
+      user_id: data.userId,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      description: data.description
+    };
+
+    const { data: newVolunteer, error } = await this.client.from(this.TABLE)
+      .insert([dbVolunteer])
+      .select()
+      .single();
+
+    if (error || !newVolunteer) {
+      throw new Error(`Failed to create volunteer: ${error?.message || 'Unknown error'}`);
+    }
 
     const transformedVolunteer = this.transformVolunteer(newVolunteer);
     
     // Clear role volunteers cache
-    localStorage.removeItem(`${this.ROLE_VOLUNTEERS_PREFIX}${volunteer.role_id}`);
+    localStorage.removeItem(`${this.ROLE_VOLUNTEERS_PREFIX}${data.roleId}`);
     
     return transformedVolunteer;
   }
 
-  async updateVolunteer(id: string, updates: Partial<Volunteer>): Promise<Volunteer> {
-    const updatedVolunteer = await this.handleQuery<Database['public']['Tables']['volunteers']['Row']>(
-      () => this.client.from(this.TABLE).update({
-        role_id: updates.role_id,
-        name: updates.name,
-        email: updates.email,
-        phone: updates.phone,
-        description: updates.description
-      }).eq('id', id).select().single(),
-      'updateVolunteer'
-    );
+  async updateVolunteer(id: string, data: {
+    roleId?: string;
+    userId?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    description?: string;
+  }): Promise<Volunteer> {
+    // Map from application type (camelCase) to database type (snake_case)
+    const updateData: Partial<Database['public']['Tables']['volunteers']['Update']> = {};
+    
+    // Only include fields that are provided
+    if (data.roleId !== undefined) updateData.role_id = data.roleId;
+    if (data.userId !== undefined) updateData.user_id = data.userId;
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email;
+    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.description !== undefined) updateData.description = data.description;
+    
+    const { data: updatedVolunteer, error } = await this.client.from(this.TABLE)
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !updatedVolunteer) {
+      throw new Error(`Failed to update volunteer: ${error?.message || 'Volunteer not found'}`);
+    }
 
     const transformedVolunteer = this.transformVolunteer(updatedVolunteer);
     
     // Clear caches
     localStorage.removeItem(`${this.CACHE_PREFIX}${id}`);
-    if (updates.role_id) {
-      localStorage.removeItem(`${this.ROLE_VOLUNTEERS_PREFIX}${updates.role_id}`);
+    if (data.roleId) {
+      localStorage.removeItem(`${this.ROLE_VOLUNTEERS_PREFIX}${data.roleId}`);
     }
     
     return transformedVolunteer;
   }
 
-  async deleteVolunteer(id: string, roleId: string): Promise<void> {
-    await this.handleQuery<null>(
-      () => this.client.from(this.TABLE).delete().eq('id', id),
-      'deleteVolunteer'
-    );
+  async deleteVolunteer(id: string): Promise<void> {
+    const { error } = await this.client.from(this.TABLE)
+      .delete()
+      .eq('id', id);
     
-    // Clear caches
+    if (error) {
+      throw new Error(`Failed to delete volunteer: ${error.message}`);
+    }
+    
+    // Clear cache
     localStorage.removeItem(`${this.CACHE_PREFIX}${id}`);
-    localStorage.removeItem(`${this.ROLE_VOLUNTEERS_PREFIX}${roleId}`);
   }
 
-  private transformVolunteer(volunteer: Database['public']['Tables']['volunteers']['Row']): Volunteer {
+  // Transform from database type (snake_case) to application type (camelCase)
+  private transformVolunteer = (volunteer: Database['public']['Tables']['volunteers']['Row']): Volunteer => {
     return {
       id: volunteer.id,
-      role_id: volunteer.role_id,
+      roleId: volunteer.role_id,
+      userId: volunteer.user_id,
       name: volunteer.name,
       email: volunteer.email,
-      phone: volunteer.phone,
-      description: volunteer.description,
-      created_at: volunteer.created_at,
-      updated_at: volunteer.updated_at
+      phone: volunteer.phone || '',
+      description: volunteer.description || '',
+      createdAt: volunteer.created_at,
+      updatedAt: volunteer.updated_at
     };
-  }
+  };
 }

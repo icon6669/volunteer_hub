@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { createUserRecord } from '../utils/userManagement';
+import { UserRole } from '../types';
 
 interface AuthContextType {
   user: User | null;
@@ -21,10 +22,10 @@ interface AuthContextType {
   updateEmailNotifications: (userId: string, value: boolean) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
   resetUnreadMessages: (userId: string) => Promise<boolean>;
+  updateUserRole: (userId: string, newRole: UserRole) => Promise<boolean>;
+  transferOwnership: (newOwnerId: string) => Promise<boolean>;
   users: any[];
 }
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -117,44 +118,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUp = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
+      // Check if this is the first user
+      const { count, error: countError } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
       
-      // Sign up with Supabase Auth
+      if (countError) {
+        console.warn('Error checking if first user, will proceed with signup:', countError);
+      }
+      
+      const isFirstUser = !countError && count === 0;
+      console.info('Is first user?', isFirstUser);
+      
+      // Sign up the user
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            is_first_user: isFirstUser,
+            name: email.split('@')[0] // Use part before @ as initial name
+          }
+        }
       });
       
       if (error) {
-        setError(error.message);
-        return;
+        throw error;
       }
       
-      // Create user record in users table with default 'volunteer' role
       if (data?.user) {
-        try {
-          const userCreated = await createUserRecord(data.user);
-          if (!userCreated) {
-            console.warn('User record may not have been created properly');
-            // Continue anyway as the auth user was created
+        // Create user record in the database
+        // The database trigger will handle role assignment based on first user status
+        await createUserRecord(
+          data.user,
+          isFirstUser ? UserRole.OWNER : UserRole.VOLUNTEER
+        );
+        
+        setSuccess('Account created successfully! Please check your email for verification.');
+        
+        // Automatically sign in the user if email verification is not required
+        if (data.session) {
+          setUser(data.user);
+          setSession(data.session);
+          
+          // Check user role and set permissions
+          const { data: userData } = await supabase
+            .from('users')
+            .select('user_role')
+            .eq('id', data.user.id)
+            .single();
+          
+          if (userData) {
+            setIsManager(userData.user_role === 'manager' || userData.user_role === 'owner' || userData.user_role === 'admin');
+            setIsOwner(userData.user_role === 'owner');
           }
-        } catch (userRecordError) {
-          console.error('Error creating user record:', userRecordError);
-          // Continue anyway as the auth user was created
         }
       }
-      
-      setSuccess('Account created successfully! Please sign in.');
     } catch (error) {
+      console.error('Error signing up:', error);
       if (error instanceof Error) {
         setError(error.message);
       } else {
         setError('An unexpected error occurred');
       }
-      console.error('Signup error:', error);
     } finally {
       setLoading(false);
     }
@@ -235,6 +265,90 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Update a user's role
+  const updateUserRole = async (userId: string, newRole: UserRole) => {
+    try {
+      // Update the user's role in the database
+      const { error } = await supabase
+        .from('users')
+        .update({ user_role: newRole })
+        .eq('id', userId);
+      
+      if (error) {
+        console.error('Error updating user role:', error);
+        setError('Failed to update user role: ' + error.message);
+        return false;
+      }
+      
+      // Update the users array to reflect the change
+      setUsers(prevUsers => 
+        prevUsers.map(u => 
+          u.id === userId ? { ...u, user_role: newRole } : u
+        )
+      );
+      
+      setSuccess(`User role updated to ${newRole}`);
+      return true;
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      if (error instanceof Error) {
+        setError('Failed to update user role: ' + error.message);
+      } else {
+        setError('An unexpected error occurred while updating user role');
+      }
+      return false;
+    }
+  };
+
+  // Transfer ownership to another user
+  const transferOwnership = async (newOwnerId: string) => {
+    try {
+      if (!user) {
+        setError('You must be logged in to transfer ownership');
+        return false;
+      }
+      
+      // Begin a transaction to ensure both updates succeed or fail together
+      const { error } = await supabase.rpc('transfer_ownership', {
+        current_owner_id: user.id,
+        new_owner_id: newOwnerId
+      });
+      
+      if (error) {
+        console.error('Error transferring ownership:', error);
+        setError('Failed to transfer ownership: ' + error.message);
+        return false;
+      }
+      
+      // Update the users array to reflect the changes
+      setUsers(prevUsers => 
+        prevUsers.map(u => 
+          u.id === user.id 
+            ? { ...u, user_role: UserRole.VOLUNTEER } 
+            : u.id === newOwnerId 
+              ? { ...u, user_role: UserRole.OWNER } 
+              : u
+        )
+      );
+      
+      // Update the current user's role in state
+      if (user.id) {
+        setIsOwner(false);
+      }
+      
+      setSuccess('Ownership transferred successfully');
+      return true;
+    } catch (error) {
+      console.error('Error transferring ownership:', error);
+      if (error instanceof Error) {
+        setError('Failed to transfer ownership: ' + error.message);
+      } else {
+        setError('An unexpected error occurred while transferring ownership');
+      }
+      return false;
+    }
+  };
+
   const clearMessages = () => {
     setError(null);
     setSuccess(null);
@@ -282,6 +396,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateEmailNotifications,
     deleteUser,
     resetUnreadMessages,
+    updateUserRole,
+    transferOwnership,
     clearMessages,
     users,
   };
@@ -300,3 +416,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
