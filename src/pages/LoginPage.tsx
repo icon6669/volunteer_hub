@@ -5,18 +5,17 @@ import { useAuth } from '../context/AuthContext';
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
+  const { signIn, signUp, user, error, success, clearMessages } = useAuth();
   const navigate = useNavigate();
 
-  const { 
-    user, 
-    loading, 
-    signUp, 
-    signIn 
-  } = useAuth();
+  useEffect(() => {
+    // Clear any previous messages when component mounts or mode changes
+    clearMessages();
+  }, [isSignUp, clearMessages]);
 
   useEffect(() => {
+    // Redirect to dashboard if user is already logged in
     if (user) {
       navigate('/dashboard');
     }
@@ -24,100 +23,106 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
     try {
       if (isSignUp) {
-        // Handle sign up
         await signUp(email, password);
-        // Show success message
-        alert('Sign up successful! Please check your email for verification.');
+        // Reset form after successful sign-up
+        setEmail('');
+        setPassword('');
+        // Switch back to sign-in mode
+        setIsSignUp(false);
       } else {
-        // Handle sign in
         await signIn(email, password);
-        navigate('/dashboard');
+        // Will redirect via the useEffect above when user is set
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+    } catch (error) {
+      console.error('Authentication error:', error);
     }
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const toggleMode = () => {
+    setIsSignUp(!isSignUp);
+    // Clear form when toggling modes
+    setEmail('');
+    setPassword('');
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          {isSignUp ? 'Create a new account' : 'Sign in to your account'}
-        </h2>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {error && (
-            <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-              <span className="block sm:inline">{error}</span>
-            </div>
-          )}
-
-          <form className="space-y-6" onSubmit={handleSubmit}>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            {isSignUp ? 'Create your account' : 'Sign in to your account'}
+          </h2>
+        </div>
+        
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
+        
+        {success && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+            <span className="block sm:inline">{success}</span>
+          </div>
+        )}
+        
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email-address" className="sr-only">
                 Email address
               </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
-              </div>
+              <input
+                id="email-address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
-
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="sr-only">
                 Password
               </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
-              </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
+          </div>
 
-            <div>
-              <button
-                type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                {isSignUp ? 'Sign up' : 'Sign in'}
-              </button>
-            </div>
-          </form>
-
-          <div className="mt-6">
+          <div>
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full text-center text-sm text-green-600 hover:text-green-500"
+              type="submit"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+              {isSignUp ? 'Sign up' : 'Sign in'}
             </button>
           </div>
-        </div>
+          
+          <div className="text-sm text-center">
+            <button
+              type="button"
+              onClick={toggleMode}
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

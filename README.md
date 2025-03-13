@@ -49,37 +49,30 @@ A web application for managing events and volunteer roles. This application allo
 
 This project uses Supabase.com as its backend. We exclusively use the hosted Supabase instance - no local Supabase setup is required or supported.
 
-1. Create a new project on [Supabase.com](https://supabase.com)
-2. Get your project URL and anon key from the project settings
-3. Add these to your `.env` file
-4. Run the database migrations:
-   ```bash
-   npx supabase db push
-   ```
+### Database Schema
 
-## Docker Deployment
+The application relies on the following tables in Supabase:
 
-1. Build the Docker image:
-   ```bash
-   docker build -t volunteer-hub .
-   ```
+1. **users** - User accounts and permissions
+   - Contains `user_role` column for permission management (not the default `role` column)
+   - Valid roles: 'admin', 'owner', 'manager', 'volunteer'
 
-2. Run the container:
-   ```bash
-   docker run -d \
-     -p 80:80 \
-     -e VITE_SUPABASE_URL=your_hosted_supabase_project_url \
-     -e VITE_SUPABASE_ANON_KEY=your_hosted_supabase_anon_key \
-     --name volunteer-hub \
-     volunteer-hub
-   ```
+2. **events** - Event details and management
+   - Stores information about volunteer events
 
-## Environment Variables
+3. **roles** - Volunteer role definitions
+   - Defines different roles volunteers can sign up for at events
 
-- `VITE_SUPABASE_URL`: Your Supabase project URL
-- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+4. **volunteers** - Tracks volunteer sign-ups
+   - Connects users to events and roles
 
-## Database Setup
+5. **messages** - Communication system
+   - Handles messaging between users
+
+6. **system_settings** - Application configuration
+   - Stores global application settings
+
+### Database Setup
 
 1. Create a new project in Supabase
 2. Use the following SQL to set up your database tables:
@@ -121,6 +114,57 @@ ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE volunteers ENABLE ROW LEVEL SECURITY;
 ```
+
+## User Role Management
+
+The application implements a role-based access control system with the following roles:
+
+- **Admin**: Has full access to all features and can manage all aspects of the application
+- **Owner**: Can manage events, volunteers, and settings for the organization
+- **Manager**: Can create and manage events and volunteer roles
+- **Volunteer**: Can sign up for events and manage their own profile
+
+User roles are stored in the `user_role` column of the `users` table. The application provides utility functions for checking user permissions in `src/utils/userRoles.ts`.
+
+## Utility Functions
+
+The application includes several utility functions to simplify common tasks:
+
+### User Management
+
+- `src/utils/userManagement.ts` - Functions for managing user roles and accounts
+
+### System Settings
+
+- `src/utils/systemSettings.ts` - Functions for retrieving and updating system settings
+- `src/utils/settingsParser.ts` - Functions for safely parsing system settings JSON
+
+### User Roles
+
+- `src/utils/userRoles.ts` - Functions for checking user permissions based on roles
+- `src/hooks/useUserRole.ts` - React hook for accessing user role information in components
+
+## Docker Deployment
+
+1. Build the Docker image:
+   ```bash
+   docker build -t volunteer-hub .
+   ```
+
+2. Run the container:
+   ```bash
+   docker run -d \
+     -p 80:80 \
+     -e VITE_SUPABASE_URL=your_hosted_supabase_project_url \
+     -e VITE_SUPABASE_ANON_KEY=your_hosted_supabase_anon_key \
+     --name volunteer-hub \
+     volunteer-hub
+   ```
+
+## Environment Variables
+
+- `VITE_SUPABASE_URL`: Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
 
 ## Contributing
 

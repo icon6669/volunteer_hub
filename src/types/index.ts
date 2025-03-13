@@ -1,9 +1,10 @@
 import { Database } from './supabase';
 
 export enum UserRole {
-  OWNER = 'OWNER',
-  MANAGER = 'MANAGER',
-  VOLUNTEER = 'VOLUNTEER'
+  ADMIN = 'admin',
+  OWNER = 'owner',
+  MANAGER = 'manager',
+  VOLUNTEER = 'volunteer'
 }
 
 export enum LandingPageTheme {
@@ -32,6 +33,17 @@ type DbMessage = DatabaseTables['messages']['Row'];
 
 // Application types with additional fields
 export type User = DbUser;
+
+// Extended user type for UI components that need additional user information
+export interface ExtendedUser {
+  id: string;
+  email: string | null;
+  user_role?: UserRole;
+  emailNotifications?: boolean;
+  image?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export type Event = DbEvent & {
   roles?: Role[];

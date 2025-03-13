@@ -1,4 +1,4 @@
-import { UserRole } from './index';
+import { UserRole, SystemSettings } from './index';
 
 export interface Database {
   public: {
@@ -173,21 +173,21 @@ export interface Database {
         Row: {
           id: string;
           key: string;
-          value: string;
+          value: string | SystemSettings;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           key: string;
-          value: string;
+          value: string | SystemSettings;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           key?: string;
-          value?: string;
+          value?: string | SystemSettings;
           created_at?: string;
           updated_at?: string;
         };
