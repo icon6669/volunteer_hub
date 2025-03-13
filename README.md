@@ -146,6 +146,42 @@ The application includes several utility functions to simplify common tasks:
 
 ## Docker Deployment
 
+There are multiple ways to deploy the Volunteer Hub application using Docker:
+
+### Option 1: Using Docker Compose (Recommended)
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/icon6669/volunteer_hub.git
+   cd volunteer_hub
+   ```
+
+2. Create a `.env` file with your Supabase credentials:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Then edit the `.env` file to include your Supabase URL and anonymous key:
+   ```
+   VITE_SUPABASE_URL=your_hosted_supabase_project_url
+   VITE_SUPABASE_ANON_KEY=your_hosted_supabase_anon_key
+   ```
+
+3. Build and run the application using Docker Compose:
+   ```bash
+   docker-compose build
+   docker-compose up -d
+   ```
+
+4. Access the application at http://localhost:8080
+
+5. To stop the application:
+   ```bash
+   docker-compose down
+   ```
+
+### Option 2: Using Docker CLI
+
 1. Build the Docker image:
    ```bash
    docker build -t volunteer-hub .
@@ -160,6 +196,55 @@ The application includes several utility functions to simplify common tasks:
      --name volunteer-hub \
      volunteer-hub
    ```
+
+### Option 3: Pulling from Docker Registry (If Available)
+
+If the image is available in a Docker registry:
+
+1. Pull the image:
+   ```bash
+   docker pull username/volunteer-hub:latest
+   ```
+
+2. Run the container:
+   ```bash
+   docker run -d \
+     -p 80:80 \
+     -e VITE_SUPABASE_URL=your_hosted_supabase_project_url \
+     -e VITE_SUPABASE_ANON_KEY=your_hosted_supabase_anon_key \
+     --name volunteer-hub \
+     username/volunteer-hub:latest
+   ```
+
+### Docker Compose Configuration
+
+The included `docker-compose.yml` file maps port 8080 on your host to port 80 in the container and sets up the necessary environment variables:
+
+```yaml
+services:
+  volunteer-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    environment:
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    volumes:
+      - ./data:/app/data
+```
+
+### Production Deployment Considerations
+
+For production deployments:
+
+1. Use specific image tags instead of `latest` for better version control
+2. Set up proper SSL/TLS termination using a reverse proxy like Nginx or Traefik
+3. Consider using Docker Swarm or Kubernetes for orchestration in larger deployments
+4. Implement proper logging and monitoring solutions
+5. Use Docker secrets or a secure environment variable management system for sensitive information
 
 ## Environment Variables
 
