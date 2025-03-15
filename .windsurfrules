@@ -1,0 +1,2 @@
+-whenver you want to restart docker for this project run "cd /Users/kevinjemison/Documents/GitHub/volunteer_hub && docker-compose down && docker-compose build && docker-compose up -d" in the terninal
+- Only use the hostesd supabase instance
