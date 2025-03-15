@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { UserRole } from '../types';
-import { Shield, UserCheck, UserX, Mail, LogIn, UserMinus, AlertCircle } from 'lucide-react';
+import { Shield, UserCheck, UserX, Mail, UserMinus, AlertCircle, Database, Trash2 } from 'lucide-react';
 
 const AdminPage: React.FC = () => {
-  const { users, updateUserRole, user, transferOwnership, deleteUser } = useAuth();
+  const { users, updateUserRole, user, transferOwnership, deleteUser, clearDatabaseData } = useAuth();
   
   // State for ownership transfer confirmation
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
@@ -15,6 +14,10 @@ const AdminPage: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  
+  // State for database clearing confirmation
+  const [showClearDatabaseConfirm, setShowClearDatabaseConfirm] = useState(false);
+  const [clearDatabaseConfirmText, setClearDatabaseConfirmText] = useState('');
   
   const getProviderIcon = (providerId?: string) => {
     if (!providerId) return <Mail className="h-4 w-4 text-gray-500" />;
@@ -90,6 +93,19 @@ const AdminPage: React.FC = () => {
     }
   };
   
+  const handleClearDatabase = () => {
+    setClearDatabaseConfirmText('');
+    setShowClearDatabaseConfirm(true);
+  };
+  
+  const confirmClearDatabase = async () => {
+    if (clearDatabaseConfirmText === 'CLEAR DATABASE') {
+      await clearDatabaseData();
+      setShowClearDatabaseConfirm(false);
+      setClearDatabaseConfirmText('');
+    }
+  };
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
@@ -101,6 +117,37 @@ const AdminPage: React.FC = () => {
           Manage user roles and system settings
         </p>
       </div>
+      
+      {/* Owner Actions Panel - Only visible to owners */}
+      {user && user.user_role === 'OWNER' && (
+        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+          <div className="p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center">
+              <Database className="mr-2 h-5 w-5 text-primary-600" />
+              Owner Actions
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="border rounded-lg p-4 bg-red-50">
+                <h3 className="font-semibold text-lg mb-2 text-red-700 flex items-center">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Database Management
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  As an owner, you have the ability to clear data from the database. This action will remove all events, roles, volunteers, and messages while preserving user accounts.
+                </p>
+                <button
+                  onClick={handleClearDatabase}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear Database Data
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
         <div className="p-6">
@@ -164,12 +211,12 @@ const AdminPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                        ${u.userRole === UserRole.OWNER 
+                        ${u.user_role === 'OWNER' 
                           ? 'bg-primary-100 text-primary-800' 
-                          : u.userRole === UserRole.MANAGER 
+                          : u.user_role === 'MANAGER' 
                             ? 'bg-secondary-100 text-secondary-800' 
                             : 'bg-accent-100 text-accent-800'}`}>
-                        {u.userRole.charAt(0).toUpperCase() + u.userRole.slice(1)}
+                        {u.user_role.charAt(0).toUpperCase() + u.user_role.slice(1)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -177,18 +224,18 @@ const AdminPage: React.FC = () => {
                         {/* Role management actions */}
                         {u.id !== user?.id ? (
                           <>
-                            {u.userRole !== UserRole.MANAGER && (
+                            {u.user_role !== 'MANAGER' && (
                               <button
-                                onClick={() => updateUserRole(u.id, UserRole.MANAGER)}
+                                onClick={() => updateUserRole(u.id, 'MANAGER' as const)}
                                 className="text-secondary-600 hover:text-secondary-900 flex items-center"
                               >
                                 <UserCheck className="h-4 w-4 mr-1" />
                                 Make Manager
                               </button>
                             )}
-                            {u.userRole !== UserRole.VOLUNTEER && (
+                            {u.user_role !== 'VOLUNTEER' && (
                               <button
-                                onClick={() => updateUserRole(u.id, UserRole.VOLUNTEER)}
+                                onClick={() => updateUserRole(u.id, 'VOLUNTEER' as const)}
                                 className="text-gray-600 hover:text-gray-900 flex items-center"
                               >
                                 <UserX className="h-4 w-4 mr-1" />
@@ -197,7 +244,7 @@ const AdminPage: React.FC = () => {
                             )}
                             
                             {/* Transfer ownership button (only for non-owner users) */}
-                            {user?.userRole === UserRole.OWNER && u.userRole !== UserRole.OWNER && (
+                            {user?.user_role === 'OWNER' && u.user_role !== 'OWNER' && (
                               <button
                                 onClick={() => handleTransferOwnership(u.id)}
                                 className="text-primary-600 hover:text-primary-900 flex items-center"
@@ -218,7 +265,7 @@ const AdminPage: React.FC = () => {
                           </>
                         ) : (
                           <span className="text-gray-400">
-                            {u.userRole === UserRole.OWNER 
+                            {u.user_role === 'OWNER' 
                               ? "Transfer ownership to delete account" 
                               : "Cannot modify own role"}
                           </span>
@@ -257,7 +304,7 @@ const AdminPage: React.FC = () => {
                 </li>
                 <li className="flex items-start">
                   <span className="text-green-500 mr-2">✓</span>
-                  Create and manage events
+                  Create and manage all events
                 </li>
                 <li className="flex items-start">
                   <span className="text-green-500 mr-2">✓</span>
@@ -270,6 +317,10 @@ const AdminPage: React.FC = () => {
                 <li className="flex items-start">
                   <span className="text-green-500 mr-2">✓</span>
                   Delete user accounts
+                </li>
+                <li className="flex items-start">
+                  <span className="text-green-500 mr-2">✓</span>
+                  Clear database data
                 </li>
               </ul>
             </div>
@@ -446,6 +497,66 @@ const AdminPage: React.FC = () => {
                   }`}
                 >
                   Delete Account
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Clear Database Confirmation Modal */}
+      {showClearDatabaseConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4 text-red-600">
+                <AlertCircle className="h-6 w-6 mr-2" />
+                <h2 className="text-xl font-semibold">Clear Database Data</h2>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-gray-600 mb-4">
+                  You are about to clear all data from the database. This action will:
+                </p>
+                
+                <ul className="list-disc pl-5 mb-4 text-gray-600 space-y-1">
+                  <li>Delete all events</li>
+                  <li>Delete all volunteer roles</li>
+                  <li>Delete all volunteer sign-ups</li>
+                  <li>Delete all messages</li>
+                  <li>User accounts will be preserved</li>
+                  <li><strong>This action cannot be undone</strong></li>
+                </ul>
+                
+                <div className="bg-red-50 p-3 rounded-md text-red-800 text-sm mb-4">
+                  <AlertCircle className="h-4 w-4 inline-block mr-1" />
+                  To confirm, please type <strong>CLEAR DATABASE</strong> in the field below.
+                </div>
+                
+                <input
+                  type="text"
+                  value={clearDatabaseConfirmText}
+                  onChange={(e) => setClearDatabaseConfirmText(e.target.value)}
+                  placeholder="Type CLEAR DATABASE"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowClearDatabaseConfirm(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmClearDatabase}
+                  disabled={clearDatabaseConfirmText !== 'CLEAR DATABASE'}
+                  className={`px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors ${
+                    clearDatabaseConfirmText !== 'CLEAR DATABASE' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  Clear Database
                 </button>
               </div>
             </div>

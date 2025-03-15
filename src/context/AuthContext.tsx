@@ -22,8 +22,9 @@ interface AuthContextType {
   updateEmailNotifications: (userId: string, value: boolean) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
   resetUnreadMessages: (userId: string) => Promise<boolean>;
-  updateUserRole: (userId: string, newRole: UserRole) => Promise<boolean>;
+  updateUserRole: (userId: string, newRole: UserRole | string) => Promise<boolean>;
   transferOwnership: (newOwnerId: string) => Promise<boolean>;
+  clearDatabaseData: () => Promise<boolean>;
   users: any[];
 }
 
@@ -265,10 +266,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Update a user's role
-  const updateUserRole = async (userId: string, newRole: UserRole) => {
+  // Update user role
+  const updateUserRole = async (userId: string, newRole: UserRole | string) => {
     try {
-      // Update the user's role in the database
+      if (!user || !isOwner) {
+        setError('Only owners can update user roles');
+        return false;
+      }
+      
+      // Call the Supabase function to update the user role
       const { error } = await supabase
         .from('users')
         .update({ user_role: newRole })
@@ -280,14 +286,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      // Update the users array to reflect the change
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
-          u.id === userId ? { ...u, user_role: newRole } : u
-        )
-      );
+      setSuccess('User role updated successfully');
       
-      setSuccess(`User role updated to ${newRole}`);
+      // Refresh the users list
+      fetchUsers();
+      
       return true;
     } catch (error) {
       console.error('Error updating user role:', error);
@@ -354,6 +357,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSuccess(null);
   };
 
+  // Clear all data from the database (OWNER only)
+  const clearDatabaseData = async () => {
+    try {
+      if (!user || !isOwner) {
+        setError('Only owners can clear database data');
+        return false;
+      }
+      
+      // Call the RPC function to clear database data
+      const { error } = await supabase.rpc('clear_database_data');
+      
+      if (error) {
+        console.error('Error clearing database data:', error);
+        setError('Failed to clear database data: ' + error.message);
+        return false;
+      }
+      
+      setSuccess('Database data cleared successfully');
+      
+      // Refresh the users list
+      fetchUsers();
+      
+      return true;
+    } catch (error) {
+      console.error('Error clearing database data:', error);
+      if (error instanceof Error) {
+        setError('Failed to clear database data: ' + error.message);
+      } else {
+        setError('An unexpected error occurred while clearing database data');
+      }
+      return false;
+    }
+  };
+
   // Fetch all users from the database
   const fetchUsers = async () => {
     try {
@@ -399,6 +436,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateUserRole,
     transferOwnership,
     clearMessages,
+    clearDatabaseData,
     users,
   };
 

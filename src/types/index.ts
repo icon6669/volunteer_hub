@@ -36,11 +36,12 @@ export interface User {
   email: string;
   image?: string | null;
   userRole: UserRole;
+  user_role: string; 
   emailNotifications: boolean;
   unreadMessages: number;
   providerId?: string | null;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string; 
+  updated_at: string; 
 }
 
 // Extended user type for UI components that need additional user information
@@ -133,11 +134,12 @@ export function transformDatabaseUser(dbUser: DbUser): User {
     email: dbUser.email,
     image: dbUser.image || undefined,
     userRole: dbUser.user_role as UserRole,
+    user_role: dbUser.user_role,
     emailNotifications: dbUser.email_notifications,
     unreadMessages: dbUser.unread_messages,
     providerId: dbUser.provider_id || undefined,
-    createdAt: dbUser.created_at,
-    updatedAt: dbUser.updated_at
+    created_at: dbUser.created_at,
+    updated_at: dbUser.updated_at
   };
 }
 

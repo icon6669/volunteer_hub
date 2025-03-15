@@ -118,11 +118,12 @@ export class UserService extends BaseService {
       email: user.email,
       image: user.image || undefined,
       userRole: user.user_role as UserRole,
+      user_role: user.user_role as UserRole,
       emailNotifications: user.email_notifications,
       unreadMessages: user.unread_messages,
       providerId: user.provider_id || undefined,
-      createdAt: user.created_at,
-      updatedAt: user.updated_at
+      created_at: user.created_at,
+      updated_at: user.updated_at
     };
   }
 }
