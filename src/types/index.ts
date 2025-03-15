@@ -1,10 +1,10 @@
 import type { Database } from './supabase';
 
 export enum UserRole {
-  ADMIN = 'admin',
-  OWNER = 'owner',
-  MANAGER = 'manager',
-  VOLUNTEER = 'volunteer'
+  ADMIN = 'ADMIN',
+  OWNER = 'OWNER',
+  MANAGER = 'MANAGER',
+  VOLUNTEER = 'VOLUNTEER'
 }
 
 export enum LandingPageTheme {
@@ -36,7 +36,7 @@ export interface User {
   email: string;
   image?: string | null;
   userRole: UserRole;
-  user_role: string; 
+  user_role: DbUser['user_role']; 
   emailNotifications: boolean;
   unreadMessages: number;
   providerId?: string | null;

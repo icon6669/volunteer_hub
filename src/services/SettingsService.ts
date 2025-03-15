@@ -14,7 +14,7 @@ export class SettingsService extends BaseService {
 
     // If not in cache, fetch from Supabase
     const settings = await this.handleQuery<Database['public']['Tables']['system_settings']['Row']>(
-      () => this.supabase.from(this.TABLE).select('*').single(),
+      () => this.supabase.from(this.TABLE).select('*').eq('key', 'settings').single(),
       'getSettings'
     );
 
@@ -30,10 +30,11 @@ export class SettingsService extends BaseService {
     const { data: existingSettings } = await this.supabase
       .from(this.TABLE)
       .select('id')
+      .eq('key', 'settings')
       .single();
 
     // Prepare settings for database
-    const dbSettings = {
+    const settingsValue = {
       google_auth_enabled: settings.googleAuthEnabled,
       google_client_id: settings.googleClientId,
       google_client_secret: settings.googleClientSecret,
@@ -49,8 +50,8 @@ export class SettingsService extends BaseService {
     // Update or insert settings
     const updatedSettings = await this.handleQuery<Database['public']['Tables']['system_settings']['Row']>(
       () => existingSettings
-        ? this.supabase.from(this.TABLE).update(dbSettings).eq('id', existingSettings.id).select().single()
-        : this.supabase.from(this.TABLE).insert([dbSettings]).select().single(),
+        ? this.supabase.from(this.TABLE).update({ value: settingsValue }).eq('id', existingSettings.id).select().single()
+        : this.supabase.from(this.TABLE).insert([{ key: 'settings', value: settingsValue }]).select().single(),
       'updateSettings'
     );
 
@@ -62,17 +63,20 @@ export class SettingsService extends BaseService {
   }
 
   private transformSettings(settings: Database['public']['Tables']['system_settings']['Row']): SystemSettings {
+    // Safely extract the value field and cast it to the expected structure
+    const settingsData = settings?.value as Record<string, any> || {};
+    
     return {
-      googleAuthEnabled: settings.google_auth_enabled,
-      googleClientId: settings.google_client_id || '',
-      googleClientSecret: settings.google_client_secret || '',
-      facebookAuthEnabled: settings.facebook_auth_enabled,
-      facebookAppId: settings.facebook_app_id || '',
-      facebookAppSecret: settings.facebook_app_secret || '',
-      organizationName: settings.organization_name,
-      organizationLogo: settings.organization_logo || '',
-      primaryColor: settings.primary_color,
-      allowPublicEventViewing: settings.allow_public_event_viewing,
+      googleAuthEnabled: settingsData.google_auth_enabled || false,
+      googleClientId: settingsData.google_client_id || '',
+      googleClientSecret: settingsData.google_client_secret || '',
+      facebookAuthEnabled: settingsData.facebook_auth_enabled || false,
+      facebookAppId: settingsData.facebook_app_id || '',
+      facebookAppSecret: settingsData.facebook_app_secret || '',
+      organizationName: settingsData.organization_name || 'Volunteer Hub',
+      organizationLogo: settingsData.organization_logo || '',
+      primaryColor: settingsData.primary_color || '#3b82f6',
+      allowPublicEventViewing: settingsData.allow_public_event_viewing || true,
     };
   }
 }

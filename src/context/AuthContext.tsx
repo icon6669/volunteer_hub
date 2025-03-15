@@ -84,21 +84,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (data) {
         // Admin role has all privileges
-        if (data.user_role === 'admin') {
+        if (data.user_role === 'ADMIN' || data.user_role === 'admin') {
           setIsManager(true);
           setIsOwner(true);
           return;
         }
         
         // Owner role has manager privileges
-        if (data.user_role === 'owner') {
+        if (data.user_role === 'OWNER' || data.user_role === 'owner') {
           setIsManager(true);
           setIsOwner(true);
           return;
         }
         
         // Manager role
-        if (data.user_role === 'manager') {
+        if (data.user_role === 'MANAGER' || data.user_role === 'manager') {
           setIsManager(true);
           setIsOwner(false);
           return;
@@ -174,8 +174,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .single();
           
           if (userData) {
-            setIsManager(userData.user_role === 'manager' || userData.user_role === 'owner' || userData.user_role === 'admin');
-            setIsOwner(userData.user_role === 'owner');
+            setIsManager(userData.user_role === 'MANAGER' || userData.user_role === 'OWNER' || userData.user_role === 'ADMIN');
+            setIsOwner(userData.user_role === 'OWNER');
           }
         }
       }

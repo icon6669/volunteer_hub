@@ -61,21 +61,28 @@ export const fetchSettings = async (): Promise<SystemSettings> => {
     const { data, error } = await supabase
       .from('system_settings')
       .select('*')
+      .eq('key', 'settings')
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('Error in getSettings:', error);
+      throw error;
+    }
+    
+    // Extract settings from the JSON value field
+    const settingsData = data?.value || {};
     
     return {
-      googleAuthEnabled: data.google_auth_enabled,
-      googleClientId: data.google_client_id || '',
-      googleClientSecret: data.google_client_secret || '',
-      facebookAuthEnabled: data.facebook_auth_enabled,
-      facebookAppId: data.facebook_app_id || '',
-      facebookAppSecret: data.facebook_app_secret || '',
-      organizationName: data.organization_name,
-      organizationLogo: data.organization_logo || '',
-      primaryColor: data.primary_color,
-      allowPublicEventViewing: data.allow_public_event_viewing,
+      googleAuthEnabled: settingsData.google_auth_enabled || false,
+      googleClientId: settingsData.google_client_id || '',
+      googleClientSecret: settingsData.google_client_secret || '',
+      facebookAuthEnabled: settingsData.facebook_auth_enabled || false,
+      facebookAppId: settingsData.facebook_app_id || '',
+      facebookAppSecret: settingsData.facebook_app_secret || '',
+      organizationName: settingsData.organization_name || 'Volunteer Hub',
+      organizationLogo: settingsData.organization_logo || '',
+      primaryColor: settingsData.primary_color || '#3b82f6',
+      allowPublicEventViewing: settingsData.allow_public_event_viewing || true,
     };
   } catch (error) {
     handleDbError(error, 'fetch settings');
@@ -89,9 +96,10 @@ export const saveSettings = async (settings: SystemSettings): Promise<void> => {
     const { data: existingSettings } = await supabase
       .from('system_settings')
       .select('id')
+      .eq('key', 'settings')
       .single();
     
-    const dbSettings = {
+    const settingsValue = {
       google_auth_enabled: settings.googleAuthEnabled,
       google_client_id: settings.googleClientId,
       google_client_secret: settings.googleClientSecret,
@@ -103,35 +111,25 @@ export const saveSettings = async (settings: SystemSettings): Promise<void> => {
       primary_color: settings.primaryColor,
       allow_public_event_viewing: settings.allowPublicEventViewing,
     };
-
-    const { error } = existingSettings
-      ? await supabase
-          .from('system_settings')
-          .update(dbSettings)
-          .eq('id', existingSettings.id)
-      : await supabase
-          .from('system_settings')
-          .insert([dbSettings]);
     
-    if (error) throw error;
+    if (existingSettings) {
+      // Update existing settings
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ value: settingsValue })
+        .eq('id', existingSettings.id);
+      
+      if (error) throw error;
+    } else {
+      // Insert new settings
+      const { error } = await supabase
+        .from('system_settings')
+        .insert([{ key: 'settings', value: settingsValue }]);
+      
+      if (error) throw error;
+    }
   } catch (error) {
     handleDbError(error, 'save settings');
-  }
-};
-
-// Helper function to check if an owner exists
-export const checkOwnerExists = async (): Promise<boolean> => {
-  try {
-    const { count, error } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('userrole', UserRole.OWNER);
-    
-    if (error) throw error;
-    return count ? count > 0 : false;
-  } catch (error) {
-    handleDbError(error, 'check owner exists');
-    return false;
   }
 };
 
