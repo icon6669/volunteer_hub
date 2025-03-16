@@ -30,13 +30,20 @@ Volunteer Hub is built as a modern web application with the following architectu
 - **Deployment**: Docker containerization for consistent deployment across environments
 
 ### 2.2 User Roles
-The system supports the following user roles:
+The system supports the following user roles with a strict hierarchy (ADMIN > OWNER > MANAGER > VOLUNTEER):
 
 1. **Anonymous Users**: Can view public events if allowed by system settings
 2. **Registered Users (VOLUNTEER)**: Can view events, sign up for volunteer roles, and manage their profiles
-3. **Event Managers (MANAGER)**: Can assist with event management for specific events
-4. **Event Owners (OWNER)**: Can create and manage events, define roles, and communicate with volunteers
-5. **Administrators (ADMIN)**: Have full system access, including system settings management and user role assignment
+3. **Event Managers (MANAGER)**: Can assist with event management for specific events. Inherits all VOLUNTEER permissions.
+4. **Event Owners (OWNER)**: The initial user who created the organization. Has full access to manage users, events, and system settings. Inherits all MANAGER permissions. Can transfer ownership to another user.
+5. **Administrators (ADMIN)**: Has full access to manage users, events, and system settings. Inherits all OWNER permissions. Cannot transfer ownership.
+
+**First User Behavior**: The first user to register in the system is automatically assigned the OWNER role.
+
+**Ownership Transfer**: The current OWNER can transfer ownership to another user. During transfer:
+- The new user becomes OWNER
+- The previous owner becomes VOLUNTEER
+- Only one OWNER can exist at a time
 
 ## 3. Current Features
 
@@ -89,7 +96,9 @@ The application uses the following database tables:
 
 1. **users**
    - User profiles and authentication information
-   - Tracks user roles, notification preferences, and unread message counts
+   - Tracks user roles in the `user_role` column (string enum: 'admin', 'owner', 'manager', 'volunteer')
+   - Stores notification preferences and unread message counts
+   - Note: Uses custom `user_role` column instead of Supabase's built-in role system
 
 2. **events**
    - Event details including name, description, location, dates
@@ -114,12 +123,13 @@ The application uses the following database tables:
 ### 4.2 Security Implementation
 - Row Level Security (RLS) policies for all database tables
 - JWT-based authentication
-- Role-based access control
+- Role-based access control using the `user_role` column
 - Secure password handling via Supabase Auth
+- Error handling for authentication failures with specific error messages
 
 ### 4.3 Frontend Implementation
 - React functional components with hooks
-- Context API for state management
+- AuthContext for managing authentication state and role checking
 - TypeScript for type safety
 - Tailwind CSS for styling
 - Responsive design for mobile and desktop
@@ -128,6 +138,7 @@ The application uses the following database tables:
 - Supabase JavaScript client for database operations
 - Real-time subscriptions for messaging and notifications
 - Type-safe database operations using generated TypeScript types
+- Role utility functions (isAdmin, isOwner, etc.) in utils/userRoles.ts
 
 ## 5. Deployment
 
@@ -759,11 +770,12 @@ Common error scenarios:
 ### 22.1 Testing Framework and Approach
 
 - **Testing Layers**:
-  - **Unit Tests**: Jest for individual components and services
-  - **Integration Tests**: Testing Library for component integration
-  - **API Tests**: Supertest for Supabase function testing
-  - **End-to-End Tests**: Cypress for critical user flows
-  - **Accessibility Tests**: axe-core for WCAG compliance
+  - **Unit Testing**: Component and service-level tests with Jest
+  - **Integration Testing**: API endpoint testing with Supertest
+  - **End-to-End Testing**: Critical user flows with Cypress
+  - **Visual Regression Testing**: UI component testing with Storybook
+  - **Accessibility Testing**: Automated checks with axe-core
+  - **Manual Testing**: Exploratory testing for complex interactions
 
 - **Test Organization**:
   - Tests co-located with implementation files

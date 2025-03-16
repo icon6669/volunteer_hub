@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, UserPlus, ClipboardList, LogIn, BarChart, Users } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -6,7 +6,13 @@ import { useAuth } from '../context/AuthContext';
 
 const HomePage: React.FC = () => {
   const { events } = useAppContext();
-  const { isAuthenticated, isManager } = useAuth();
+  const { isAuthenticated, isManager, clearMessages } = useAuth();
+  
+  // Clear any authentication messages when component mounts
+  useEffect(() => {
+    clearMessages();
+  }, [clearMessages]);
+  
   const upcomingEvents = events
     .filter(event => new Date(event.date) >= new Date())
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())

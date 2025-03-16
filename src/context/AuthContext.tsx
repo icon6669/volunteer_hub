@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { createUserRecord } from '../utils/userManagement';
@@ -12,6 +12,7 @@ interface AuthContextType {
   success: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isAdmin: boolean;
   isManager: boolean;
   isOwner: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -22,10 +23,11 @@ interface AuthContextType {
   updateEmailNotifications: (userId: string, value: boolean) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
   resetUnreadMessages: (userId: string) => Promise<boolean>;
-  updateUserRole: (userId: string, newRole: UserRole | string) => Promise<boolean>;
+  updateUserRole: (userId: string, newRole: UserRole) => Promise<boolean>;
   transferOwnership: (newOwnerId: string) => Promise<boolean>;
   clearDatabaseData: () => Promise<boolean>;
   users: any[];
+  resetPassword: (email: string) => Promise<void>;
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isManager, setIsManager] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
@@ -61,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session?.user) {
         checkUserRole(session.user.id);
       } else {
+        setIsAdmin(false);
         setIsManager(false);
         setIsOwner(false);
       }
@@ -71,51 +75,111 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkUserRole = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      // First, check if the user exists
+      let { data: userData, error: userError } = await supabase
         .from('users')
-        .select('user_role')
+        .select('*')
         .eq('id', userId)
         .single();
       
-      if (error) {
-        console.error('Error fetching user role:', error);
-        return;
+      if (userError || !userData) {
+        console.info('User record not found, attempting to create one:', userId);
+        
+        // Get user details from auth
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError) {
+          console.error('Error getting auth user:', authError);
+          return;
+        }
+        
+        if (authUser) {
+          // Check if this is the first user
+          const { count, error: countError } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true });
+          
+          const isFirstUser = !countError && count === 0;
+          console.info('Creating new user record. Is first user?', isFirstUser);
+          
+          try {
+            // Create user record and wait for it to be confirmed
+            await createUserRecord(
+              authUser,
+              isFirstUser ? UserRole.OWNER : UserRole.VOLUNTEER
+            );
+            
+            // After successful creation, fetch the user data
+            const { data: newUserData, error: newUserError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', userId)
+              .single();
+            
+            if (newUserError) {
+              console.error('Error fetching new user record:', newUserError);
+              setError('Error setting up user account. Please try logging out and back in.');
+              return;
+            }
+            
+            userData = newUserData;
+            console.info('Successfully created and fetched user data:', userData);
+          } catch (createError) {
+            console.error('Error creating user record:', createError);
+            setError('Error creating user account. Please try logging out and back in.');
+            return;
+          }
+        }
       }
       
-      if (data) {
-        // Admin role has all privileges
-        if (data.user_role === 'ADMIN' || data.user_role === 'admin') {
-          setIsManager(true);
-          setIsOwner(true);
-          return;
-        }
+      if (userData) {
+        console.info('Setting user role from data:', userData);
         
-        // Owner role has manager privileges
-        if (data.user_role === 'OWNER' || data.user_role === 'owner') {
-          setIsManager(true);
-          setIsOwner(true);
-          return;
-        }
-        
-        // Manager role
-        if (data.user_role === 'MANAGER' || data.user_role === 'manager') {
-          setIsManager(true);
-          setIsOwner(false);
-          return;
-        }
-        
-        // Volunteer or other roles
-        setIsManager(false);
-        setIsOwner(false);
+        const role = userData.user_role;
+        setIsAdmin(role === 'admin');
+        setIsOwner(role === 'owner');
+        setIsManager(role === 'manager' || role === 'owner');
+      } else {
+        console.error('No user data available after creation attempts');
+        setError('Unable to set up user account. Please contact support.');
       }
     } catch (error) {
       console.error('Error checking user role:', error);
+      setError('Error checking user permissions. Please try again.');
     }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          setError('Invalid email or password. Please check your credentials and try again.');
+        } else if (error.message.includes('Email not confirmed')) {
+          setError('Please verify your email address before signing in.');
+        } else {
+          setError(error.message);
+        }
+        throw error;
+      }
+      
+      // If we get here, sign-in was successful
+      if (data?.user) {
+        console.info('Sign-in successful for user:', data.user);
+        setSuccess('Sign in successful!');
+        
+        // Check user role and set permissions
+        await checkUserRole(data.user.id);
+      }
+    } catch (error) {
+      console.error('Error signing in:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const signUp = async (email: string, password: string) => {
@@ -148,10 +212,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       if (error) {
+        if (error.message.includes('already registered')) {
+          setError('This email is already registered. Please sign in or reset your password.');
+        } else if (error.message.includes('password')) {
+          setError('Password is too weak. Please use at least 8 characters with a mix of letters, numbers, and symbols.');
+        } else {
+          setError(error.message);
+        }
         throw error;
       }
       
       if (data?.user) {
+        console.info('Sign-up successful for user:', data.user);
         // Create user record in the database
         // The database trigger will handle role assignment based on first user status
         await createUserRecord(
@@ -174,17 +246,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .single();
           
           if (userData) {
-            setIsManager(userData.user_role === 'MANAGER' || userData.user_role === 'OWNER' || userData.user_role === 'ADMIN');
-            setIsOwner(userData.user_role === 'OWNER');
+            const role = userData.user_role;
+            setIsAdmin(role === 'admin');
+            setIsOwner(role === 'owner');
+            setIsManager(role === 'manager' || role === 'owner');
           }
         }
       }
     } catch (error) {
       console.error('Error signing up:', error);
-      if (error instanceof Error) {
+      if (error instanceof Error && !error.message.includes('already registered') && !error.message.includes('password')) {
+        setError(error.message || 'An unexpected error occurred');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) {
         setError(error.message);
-      } else {
-        setError('An unexpected error occurred');
+        throw error;
+      }
+      
+      setSuccess('Password reset instructions have been sent to your email.');
+    } catch (error) {
+      console.error('Error requesting password reset:', error);
+      if (error instanceof Error && !error.message) {
+        setError('An unexpected error occurred while requesting password reset.');
       }
     } finally {
       setLoading(false);
@@ -192,13 +289,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
+      // Clear user state
+      setUser(null);
+      setSession(null);
+      setIsAdmin(false);
+      setIsManager(false);
+      setIsOwner(false);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    return signOut();
   };
 
   const updateEmailNotifications = async (userId: string, value: boolean) => {
@@ -253,8 +365,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       // Also update the users array to reflect the change
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
+      setUsers((prevUsers: any[]) =>
+        prevUsers.map((u: any) =>
           u.id === userId ? { ...u, unread_messages: 0 } : u
         )
       );
@@ -267,38 +379,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Update user role
-  const updateUserRole = async (userId: string, newRole: UserRole | string) => {
+  const updateUserRole = async (userId: string, newRole: UserRole) => {
     try {
       if (!user || !isOwner) {
         setError('Only owners can update user roles');
         return false;
       }
-      
-      // Call the Supabase function to update the user role
+
       const { error } = await supabase
         .from('users')
         .update({ user_role: newRole })
         .eq('id', userId);
-      
+
       if (error) {
         console.error('Error updating user role:', error);
-        setError('Failed to update user role: ' + error.message);
+        setError('Failed to update user role');
         return false;
       }
-      
+
+      // Update local state
+      setUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u.id === userId ? { ...u, user_role: newRole } : u
+        )
+      );
+
       setSuccess('User role updated successfully');
-      
-      // Refresh the users list
-      fetchUsers();
-      
       return true;
     } catch (error) {
       console.error('Error updating user role:', error);
-      if (error instanceof Error) {
-        setError('Failed to update user role: ' + error.message);
-      } else {
-        setError('An unexpected error occurred while updating user role');
-      }
+      setError('An unexpected error occurred');
       return false;
     }
   };
@@ -306,26 +416,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Transfer ownership to another user
   const transferOwnership = async (newOwnerId: string) => {
     try {
-      if (!user) {
-        setError('You must be logged in to transfer ownership');
+      if (!user || !isOwner) {
+        setError('Only the current owner can transfer ownership');
         return false;
       }
-      
-      // Begin a transaction to ensure both updates succeed or fail together
-      const { error } = await supabase.rpc('transfer_ownership', {
-        current_owner_id: user.id,
-        new_owner_id: newOwnerId
-      });
-      
-      if (error) {
-        console.error('Error transferring ownership:', error);
-        setError('Failed to transfer ownership: ' + error.message);
+
+      // Update the new owner's role to OWNER
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ user_role: UserRole.OWNER })
+        .eq('id', newOwnerId);
+
+      if (updateError) {
+        console.error('Error updating new owner role:', updateError);
+        setError('Failed to transfer ownership');
         return false;
       }
-      
-      // Update the users array to reflect the changes
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
+
+      // Update the current owner's role to VOLUNTEER
+      const { error: currentOwnerError } = await supabase
+        .from('users')
+        .update({ user_role: UserRole.VOLUNTEER })
+        .eq('id', user.id);
+
+      if (currentOwnerError) {
+        console.error('Error updating current owner role:', currentOwnerError);
+        setError('Failed to transfer ownership');
+        return false;
+      }
+
+      // Update local state
+      setUsers((prevUsers: any[]) =>
+        prevUsers.map((u: any) =>
           u.id === user.id 
             ? { ...u, user_role: UserRole.VOLUNTEER } 
             : u.id === newOwnerId 
@@ -333,21 +455,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : u
         )
       );
-      
-      // Update the current user's role in state
-      if (user.id) {
-        setIsOwner(false);
-      }
-      
+
+      setIsOwner(false);
+      setIsManager(true);
       setSuccess('Ownership transferred successfully');
       return true;
     } catch (error) {
       console.error('Error transferring ownership:', error);
-      if (error instanceof Error) {
-        setError('Failed to transfer ownership: ' + error.message);
-      } else {
-        setError('An unexpected error occurred while transferring ownership');
-      }
+      setError('An unexpected error occurred');
       return false;
     }
   };
@@ -424,6 +539,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     success,
     isAuthenticated: !!user,
     isLoading: loading,
+    isAdmin,
     isManager,
     isOwner,
     signIn,
@@ -438,6 +554,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearMessages,
     clearDatabaseData,
     users,
+    resetPassword,
   };
 
   return (

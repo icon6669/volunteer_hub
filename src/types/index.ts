@@ -1,10 +1,10 @@
 import type { Database } from './supabase';
 
 export enum UserRole {
-  ADMIN = 'ADMIN',
-  OWNER = 'OWNER',
-  MANAGER = 'MANAGER',
-  VOLUNTEER = 'VOLUNTEER'
+  ADMIN = 'admin',
+  OWNER = 'owner',
+  MANAGER = 'manager',
+  VOLUNTEER = 'volunteer'
 }
 
 export enum LandingPageTheme {

@@ -104,6 +104,20 @@ const LoginPage: React.FC = () => {
             </div>
           </div>
 
+          {!isSignUp && (
+            <div className="flex items-center justify-end">
+              <div className="text-sm">
+                <button
+                  type="button"
+                  onClick={() => navigate('/reset-password')}
+                  className="font-medium text-blue-600 hover:text-blue-500"
+                >
+                  Forgot your password?
+                </button>
+              </div>
+            </div>
+          )}
+
           <div>
             <button
               type="submit"

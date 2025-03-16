@@ -7,16 +7,19 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm install && npm -v
 
 # Copy source code
 COPY . .
+
+# Skip tests in Docker build environment
+# RUN npm run test
 
 # Build the application
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginx:alpine as stage-1
 
 # Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html

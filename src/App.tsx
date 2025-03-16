@@ -12,6 +12,7 @@ import EventDetailPage from './pages/EventDetailPage';
 import EventFormPage from './pages/EventFormPage';
 import EventLandingPage from './pages/EventLandingPage';
 import LoginPage from './pages/LoginPage';
+import PasswordResetPage from './pages/PasswordResetPage';
 import AdminPage from './pages/AdminPage';
 import AccountPage from './pages/AccountPage';
 import DashboardPage from './pages/DashboardPage';
@@ -74,6 +75,16 @@ function AppContent() {
             <Header />
             <main className="flex-grow">
               <LoginPage />
+            </main>
+            <Footer />
+          </div>
+        } />
+        
+        <Route path="/reset-password" element={
+          <div className="flex flex-col min-h-screen bg-gray-50">
+            <Header />
+            <main className="flex-grow">
+              <PasswordResetPage />
             </main>
             <Footer />
           </div>

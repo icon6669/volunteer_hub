@@ -373,10 +373,15 @@ const EventCard: React.FC<EventCardProps> = ({ event, onToggleDetails, showDetai
 // Main Dashboard Component
 const DashboardPage: React.FC = () => {
   const { events } = useAppContext();
-  const { isAuthenticated, isManager } = useAuth();
+  const { isAuthenticated, isManager, clearMessages } = useAuth();
   const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
   const [timeFilter, setTimeFilter] = useState<'all' | 'upcoming' | 'past'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Clear any authentication messages when component mounts
+  useEffect(() => {
+    clearMessages();
+  }, [clearMessages]);
   
   // If user is not authenticated or not a manager, redirect to login
   if (!isAuthenticated) {

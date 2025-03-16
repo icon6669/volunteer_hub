@@ -33,13 +33,19 @@ const AccountPage: React.FC = () => {
     isAuthenticated, 
     logout, 
     updateEmailNotifications,
-    deleteUser
+    deleteUser,
+    clearMessages
   } = useAuth();
   
   const [user, setUser] = useState<ExtendedUser | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [emailNotifications, setEmailNotifications] = useState(false);
+  
+  // Clear any authentication messages when component mounts
+  useEffect(() => {
+    clearMessages();
+  }, [clearMessages]);
   
   // Fetch user data from the users table
   useEffect(() => {
